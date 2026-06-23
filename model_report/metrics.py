@@ -228,9 +228,12 @@ def calc_var_psi(train_series, oot_series) -> float:
         return 0.0
 
     # Equal-frequency binning PSI - always bin on train data edges
-    combined = pd.concat([train_s, oot_s])
     try:
         _, bin_edges = pd.qcut(train_s, q=10, duplicates="drop", retbins=True)
+        # Extend edges to capture oot values outside train range
+        bin_edges = bin_edges.copy()
+        bin_edges[0] = -np.inf
+        bin_edges[-1] = np.inf
         train_binned = pd.cut(train_s, bins=bin_edges)
         oot_binned = pd.cut(oot_s, bins=bin_edges)
 

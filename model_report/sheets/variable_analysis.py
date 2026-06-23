@@ -66,19 +66,19 @@ def _build_variable_overview(
 
         # OOT IV
         oot_iv = calc_var_iv(oot_data, var, config.target_col) if len(oot_data) > 0 else np.nan
-        oot_iv_val = round(oot_iv, 2) if not np.isnan(oot_iv) and oot_iv != 0 else ""
+        oot_iv_val = f"{oot_iv:.2f}" if not np.isnan(oot_iv) else ""
 
         # KS
         ks_train = float(ks_table.get(var, np.nan)) if isinstance(ks_table, pd.Series) else np.nan
-        ks_train_val = round(ks_train, 2) if not np.isnan(ks_train) else ""
+        ks_train_val = f"{ks_train:.2f}" if not np.isnan(ks_train) else ""
 
         # OOT KS
         oot_ks = calc_var_ks(oot_data, var, config.target_col) if len(oot_data) > 0 else np.nan
-        oot_ks_val = round(oot_ks, 2) if not np.isnan(oot_ks) and oot_ks != 0 else ""
+        oot_ks_val = f"{oot_ks:.2f}" if not np.isnan(oot_ks) else ""
 
         # PSI
         psi_val = calc_var_psi(train_data[var], oot_data[var]) if len(train_data) > 0 and len(oot_data) > 0 else 0
-        psi_str = f"{psi_val:.4f}" if psi_val > 0 else ""
+        psi_str = f"{psi_val:.4f}"
 
         rows.append({
             "序号": idx,
@@ -108,7 +108,7 @@ def _build_variable_overview(
 
 
 def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
-    """Format WOE table columns for Excel output."""
+    """Format WOE table columns for Excel output matching readme.md spec layout."""
     col_map = {
         "min": "min",
         "max": "max",
@@ -128,12 +128,32 @@ def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
         if src in woe_df.columns:
             out[dst] = woe_df[src]
 
-    # Compute KS if not present
-    if "ks" not in out.columns and "good_prop" in out.columns and "bad_prop" in out.columns:
-        out["ks"] = abs(out["good_prop"] - out["bad_prop"])
+    # Compute KS before formatting (use raw float values from woe_df)
+    if "ks" not in out.columns and "%Good" in woe_df.columns and "%Bad" in woe_df.columns:
+        out["ks"] = abs(woe_df["%Good"].astype(float) - woe_df["%Bad"].astype(float))
 
-    # Add ALL row if present
-    # Ensure consistent column order
+    # Convert inf values in min/max to string representations
+    for col in ["min", "max"]:
+        if col in out.columns:
+            out[col] = out[col].apply(
+                lambda x: "-inf" if (isinstance(x, float) and x == float("-inf")) or pd.isna(x)
+                else ("inf" if isinstance(x, float) and x == float("inf") else x)
+            )
+
+    # Format proportion columns as percentages
+    for col in ["good_prop", "bad_prop"]:
+        if col in out.columns:
+            out[col] = out[col].apply(
+                lambda x: f"{float(x):.2%}" if pd.notna(x) and x != "" else x
+            )
+
+    # Format bad_rate as percentage
+    if "bad_rate" in out.columns:
+        out["bad_rate"] = out["bad_rate"].apply(
+            lambda x: f"{float(x):.2%}" if pd.notna(x) and x != "" else x
+        )
+
+    # Consistent column order
     final_cols = ["min", "max", "goods", "bads", "total", "good_prop", "bad_prop",
                   "bad_rate", "woe", "iv", "ks", "lift"]
     result_cols = [c for c in final_cols if c in out.columns]
