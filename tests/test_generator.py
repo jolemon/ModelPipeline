@@ -80,8 +80,8 @@ class TestReportGenerator:
         assert config.sheet2_name in result
         assert config.sheet3_name in result
 
-    def test_without_scorecard_no_woe_tables(self, small_df):
-        """Without scorecard, top10 WOE tables should be empty."""
+    def test_without_scorecard_woe_tables_computed(self, small_df):
+        """Without scorecard, WOE tables are still computed from data."""
         config = ReportConfig(
             target_col="mob6_30",
             flag_col="data_flag",
@@ -89,14 +89,15 @@ class TestReportGenerator:
             date_col="loan_date",
             score_col="pred_score",
             sc_score_col="scorecard_score",
+            top_n_vars=3,
         )
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
         sheet2 = result[config.sheet2_name]
-        assert sheet2["top10_woe_bins"] == []
+        assert len(sheet2["top10_woe_bins"]) > 0
 
-    def test_without_scorecard_iv_train_empty(self, small_df):
-        """Without scorecard, iv_train and ks_train should be empty."""
+    def test_without_scorecard_iv_train_computed(self, small_df):
+        """Without scorecard, iv_train and ks_train are computed from data."""
         config = ReportConfig(
             target_col="mob6_30",
             flag_col="data_flag",
@@ -108,8 +109,9 @@ class TestReportGenerator:
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
         overview = result[config.sheet2_name]["ivar_ks_psi_overview"]
-        assert overview["iv_train"].iloc[0] == ""
-        assert overview["ks_train"].iloc[0] == ""
+        # iv/ks computed from data — should be non-empty numeric strings
+        assert overview["iv_train"].iloc[0] != ""
+        assert overview["ks_train"].iloc[0] != ""
 
     def test_without_scorecard_no_detail(self, small_df):
         """Without scorecard, scorecard_detail should be None."""

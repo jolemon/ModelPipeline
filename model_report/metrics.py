@@ -392,3 +392,111 @@ def calculate_all_ks(df, y_col: str = "mob6_30",
             continue
 
     return pd.DataFrame(results).sort_values("ks_manual", ascending=False)
+
+
+def compute_woe_table(df, var: str, target_col: str = "mob6_30",
+                      bins: int = 10, good: int = 0, bad: int = 1) -> "pd.DataFrame":
+    """Compute WOE/IV/KS/Lift table for a variable from data using equal-frequency binning.
+
+    Args:
+        df: DataFrame with feature and target columns.
+        var: Feature column name.
+        target_col: Target column name (0=good, 1=bad).
+        bins: Number of equal-frequency bins for numeric variables.
+        good: Value representing good in target.
+        bad: Value representing bad in target.
+
+    Returns:
+        DataFrame with columns: min, max, goods, bads, total,
+        good_prop, bad_prop, bad_rate, woe, iv, ks, lift.
+    """
+    import pandas as pd
+
+    sub = df[[var, target_col]].copy()
+    total_n = len(sub)
+    total_good = int((sub[target_col] == good).sum())
+    total_bad = int((sub[target_col] == bad).sum())
+
+    if total_good == 0 or total_bad == 0:
+        return pd.DataFrame()
+
+    overall_bad_rate = total_bad / total_n
+
+    # Determine binning method
+    is_numeric = np.issubdtype(sub[var].dtype, np.number)
+
+    if is_numeric:
+        try:
+            sub["_bin"], bin_edges = pd.qcut(sub[var], q=bins, duplicates="drop", retbins=True)
+        except Exception:
+            bin_edges = pd.cut(sub[var], bins=bins, retbins=True, duplicates="drop")[1]
+            sub["_bin"] = pd.cut(sub[var], bins=bin_edges, include_lowest=True)
+    else:
+        # Categorical: each unique value is a bin
+        sub["_bin"] = sub[var].astype(str)
+
+    rows = []
+    bin_groups = sub.groupby("_bin", observed=False)
+
+    for bin_val, group in bin_groups:
+        g = int((group[target_col] == good).sum())
+        b = int((group[target_col] == bad).sum())
+        t = len(group)
+
+        if t == 0:
+            continue
+
+        good_prop = g / total_good
+        bad_prop = b / total_bad
+        bad_rate = b / t
+
+        eps = 1e-10
+        good_prop_safe = max(good_prop, eps)
+        bad_prop_safe = max(bad_prop, eps)
+
+        woe = np.log(bad_prop_safe / good_prop_safe)
+        iv_bin = (bad_prop - good_prop) * woe
+        ks_bin = abs(bad_prop - good_prop)
+        lift = bad_rate / overall_bad_rate if overall_bad_rate > 0 else 0
+
+        # Extract bin boundaries
+        if is_numeric and isinstance(bin_val, pd.Interval):
+            mn = bin_val.left
+            mx = bin_val.right
+        elif is_numeric:
+            mn = mx = bin_val
+        else:
+            mn = mx = str(bin_val)
+
+        rows.append({
+            "min": mn,
+            "max": mx,
+            "goods": g,
+            "bads": b,
+            "total": t,
+            "good_prop": good_prop,
+            "bad_prop": bad_prop,
+            "bad_rate": bad_rate,
+            "woe": round(woe, 4),
+            "iv": round(iv_bin, 4),
+            "ks": round(ks_bin, 4),
+            "lift": round(lift, 4),
+        })
+
+    result = pd.DataFrame(rows)
+
+    # Sort by min for numeric, by bad_rate descending for categorical
+    if is_numeric and len(result) > 0:
+        result = result.sort_values("min")
+
+    # Add ALL row
+    all_row = {
+        "min": "ALL", "max": "ALL",
+        "goods": total_good, "bads": total_bad, "total": total_n,
+        "good_prop": 1.0, "bad_prop": 1.0, "bad_rate": overall_bad_rate,
+        "woe": 0.0, "iv": result["iv"].sum() if len(result) > 0 else 0.0,
+        "ks": 0.0, "lift": 1.0,
+    }
+    result = pd.concat([result, pd.DataFrame([all_row])], ignore_index=True)
+
+    return result

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from model_report.config import ReportConfig
 from model_report.metrics import (
-    calc_var_psi, calc_var_iv, calc_var_ks, calc_missing_rate,
+    calc_var_psi, calc_var_iv, calc_var_ks, calc_missing_rate, compute_woe_table,
 )
 
 
@@ -14,25 +14,22 @@ def build_variable_analysis_sheet(
 ) -> dict:
     """Build Sheet 2: Variable Analysis.
 
-    If scorecard is None, iv_train/ks_train are empty and top10 WOE tables
-    are skipped. Data-driven metrics (missing_rate, iv_oot, ks_oot, psi)
-    are always computed.
+    All metrics are computed directly from the scoring data.
+    The scorecard parameter is ignored (kept for API compatibility).
     """
     feature_cols = config.get_feature_columns(list(data.columns))
-    iv_table = scorecard.get_iv_table() if scorecard is not None else pd.Series([], dtype=float)
-    ks_table = scorecard.get_ks_table() if scorecard is not None else pd.Series([], dtype=float)
 
     # 2.1 Variable overview
-    overview = _build_variable_overview(data, feature_cols, iv_table, ks_table,
-                                        scorecard, config, metadata)
+    overview = _build_variable_overview(data, feature_cols, config, metadata)
 
-    # 2.2 Top N WOE tables (only if scorecard available)
+    # 2.2 Top N WOE tables — computed from data, not scorecard
+    top_n = config.top_n_vars
+    top_vars = _get_top_vars(overview, top_n)
     top10 = []
-    if scorecard is not None:
-        top_n = config.top_n_vars
-        top_vars = overview.head(top_n)["变量名"].tolist()
-        for var in top_vars:
-            woe_df = scorecard.get_woe_table(var)
+    train_data = data[data[config.flag_col] == "train"]
+    for var in top_vars:
+        if len(train_data) > 0:
+            woe_df = compute_woe_table(train_data, var=var, target_col=config.target_col)
             if woe_df is not None and not woe_df.empty:
                 top10.append((var, _format_woe_table(woe_df)))
 
@@ -42,16 +39,20 @@ def build_variable_analysis_sheet(
     }
 
 
+def _get_top_vars(overview: pd.DataFrame, top_n: int) -> list:
+    """Get top N variable names sorted by iv_train descending."""
+    if len(overview) == 0:
+        return []
+    return overview.head(top_n)["变量名"].tolist()
+
+
 def _build_variable_overview(
     data: pd.DataFrame,
     feature_cols: list,
-    iv_table: pd.Series,
-    ks_table: pd.Series,
-    scorecard,
     config: ReportConfig,
     metadata: dict,
 ) -> pd.DataFrame:
-    """Build the variable IV/KS/PSI overview table."""
+    """Build the variable IV/KS/PSI overview table — all computed from data."""
     rows = []
     flag_col = config.flag_col
 
@@ -62,20 +63,20 @@ def _build_variable_overview(
         var_meta = metadata.get(var, {})
         dtype = str(data[var].dtype)
 
-        # Missing rate (including special missing values)
+        # Missing rate
         missing_train = calc_missing_rate(train_data[var]) if len(train_data) > 0 else 0
         missing_oot = calc_missing_rate(oot_data[var]) if len(oot_data) > 0 else 0
 
-        # IV
-        iv_train = float(iv_table.get(var, np.nan)) if isinstance(iv_table, pd.Series) else np.nan
-        iv_train_val = round(iv_train, 2) if not np.isnan(iv_train) else ""
+        # Train IV — computed from data
+        iv_train = calc_var_iv(train_data, var, config.target_col) if len(train_data) > 0 else np.nan
+        iv_train_val = f"{iv_train:.2f}" if not np.isnan(iv_train) else ""
 
         # OOT IV
         oot_iv = calc_var_iv(oot_data, var, config.target_col) if len(oot_data) > 0 else np.nan
         oot_iv_val = f"{oot_iv:.2f}" if not np.isnan(oot_iv) else ""
 
-        # KS
-        ks_train = float(ks_table.get(var, np.nan)) if isinstance(ks_table, pd.Series) else np.nan
+        # Train KS — computed from data
+        ks_train = calc_var_ks(train_data, var, config.target_col) if len(train_data) > 0 else np.nan
         ks_train_val = f"{ks_train:.2f}" if not np.isnan(ks_train) else ""
 
         # OOT KS
@@ -115,28 +116,10 @@ def _build_variable_overview(
 
 def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
     """Format WOE table columns for Excel output matching readme.md spec layout."""
-    col_map = {
-        "min": "min",
-        "max": "max",
-        "Good": "goods",
-        "Bad": "bads",
-        "Total": "total",
-        "%Good": "good_prop",
-        "%Bad": "bad_prop",
-        "Bad Rate": "bad_rate",
-        "WoE": "woe",
-        "IV": "iv",
-        "Lift": "lift",
-    }
+    # compute_woe_table already outputs the right column names.
+    # We just need to format inf values and percentages.
 
-    out = pd.DataFrame()
-    for src, dst in col_map.items():
-        if src in woe_df.columns:
-            out[dst] = woe_df[src]
-
-    # Compute KS before formatting (use raw float values from woe_df)
-    if "ks" not in out.columns and "%Good" in woe_df.columns and "%Bad" in woe_df.columns:
-        out["ks"] = abs(woe_df["%Good"].astype(float) - woe_df["%Bad"].astype(float))
+    out = woe_df.copy()
 
     # Convert inf values in min/max to string representations
     for col in ["min", "max"]:
@@ -159,7 +142,6 @@ def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
             lambda x: f"{float(x):.2%}" if pd.notna(x) and x != "" else x
         )
 
-    # Consistent column order
     final_cols = ["min", "max", "goods", "bads", "total", "good_prop", "bad_prop",
                   "bad_rate", "woe", "iv", "ks", "lift"]
     result_cols = [c for c in final_cols if c in out.columns]

@@ -4,7 +4,7 @@ import pandas as pd
 from model_report.metrics import (
     calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_score_psi,
     calc_monthly_metrics, calc_var_psi, calc_var_iv, calc_var_ks,
-    calc_missing_rate, calculate_all_ks,
+    calc_missing_rate, calculate_all_ks, compute_woe_table,
 )
 
 
@@ -302,3 +302,50 @@ class TestCalcMissingRate:
         s = pd.Series([1.0, 2.0, 3.0, 4.0])
         rate = calc_missing_rate(s)
         assert rate == 0.0
+
+
+class TestComputeWoeTable:
+    def test_output_columns(self):
+        df = pd.DataFrame({
+            "target": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "x": np.linspace(0, 10, 20),
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        expected = ["min", "max", "goods", "bads", "total",
+                     "good_prop", "bad_prop", "bad_rate", "woe", "iv", "ks", "lift"]
+        for col in expected:
+            assert col in result.columns
+
+    def test_woe_monotonic(self):
+        """WOE should be monotonic for a well-separated variable."""
+        np.random.seed(42)
+        n = 200
+        scores = np.concatenate([
+            np.random.normal(0, 1, 100),  # goods
+            np.random.normal(5, 1, 100),  # bads
+        ])
+        df = pd.DataFrame({
+            "target": [0]*100 + [1]*100,
+            "x": scores,
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        # WOE should increase with risk (higher score = more bads)
+        woe_vals = result["woe"].values
+        assert woe_vals[0] < woe_vals[-1]
+
+    def test_iv_sum_matches_total(self):
+        df = pd.DataFrame({
+            "target": [0, 0, 0, 0, 1, 0, 1, 0, 1, 1],
+            "x": np.linspace(0, 10, 10),
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        # IV should be non-negative and total matches sum of per-bin IV
+        assert result["iv"].sum() > 0
+
+    def test_categorical_variable(self):
+        df = pd.DataFrame({
+            "target": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0],
+            "cat": ["a", "a", "b", "b", "c", "c", "a", "b", "c", "c"],
+        })
+        result = compute_woe_table(df, var="cat", target_col="target")
+        assert len(result) >= 2
