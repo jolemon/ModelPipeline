@@ -99,12 +99,31 @@ def calc_bin_metrics(y_true, y_score, bins) -> "pd.DataFrame":
 
 
 def _assign_bins(y_score, bins) -> np.ndarray:
-    """Assign each score to its bin interval string."""
+    """Assign each score to its bin interval string, respecting interval closure.
+
+    Handles pd.cut defaults (right=True, include_lowest=True) correctly:
+    first interval includes its left boundary regardless of closed attribute.
+    """
     bin_list = bins.dropna().tolist()
     result = np.empty(len(y_score), dtype=object)
     result[:] = "other"
-    for b in bin_list:
-        mask = (y_score >= b.left) & (y_score < b.right)
+    for i, b in enumerate(bin_list):
+        closed = getattr(b, "closed", "right")
+        # First bin with include_lowest=True: left boundary is inclusive
+        left_inclusive = (i == 0) or (closed == "left")
+        right_inclusive = (closed != "left")
+
+        if left_inclusive:
+            left_mask = y_score >= b.left
+        else:
+            left_mask = y_score > b.left
+
+        if right_inclusive:
+            right_mask = y_score <= b.right
+        else:
+            right_mask = y_score < b.right
+
+        mask = left_mask & right_mask
         result[mask] = str(b)
     return result
 

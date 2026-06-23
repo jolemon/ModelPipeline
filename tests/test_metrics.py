@@ -73,7 +73,7 @@ class TestCalcBinMetrics:
         score = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
         bins = pd.Series([
             pd.Interval(0.0, 0.5, closed="left"),
-            pd.Interval(0.5, 1.0, closed="left"),
+            pd.Interval(0.5, float("inf"), closed="left"),
         ])
         result = calc_bin_metrics(y, score, bins)
         expected_cols = ["min", "max", "bads", "goods", "total", "bad_rate",
@@ -87,11 +87,52 @@ class TestCalcBinMetrics:
         bins = pd.Series([
             pd.Interval(0.0, 0.3, closed="left"),
             pd.Interval(0.3, 0.7, closed="left"),
-            pd.Interval(0.7, 1.0, closed="left"),
+            pd.Interval(0.7, float("inf"), closed="left"),
         ])
         result = calc_bin_metrics(y, score, bins)
         max_ks = result["ks"].max()
         assert 0.0 <= max_ks <= 1.0
+
+    def test_cum_bads_prop_reaches_one_right_closed(self):
+        """cum_bads_prop should reach 1.0 in last bin — tests pd.cut default right=True."""
+        np.random.seed(42)
+        y = np.array([0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0])
+        score = np.random.uniform(400, 900, len(y))
+        # Simulate pd.cut default: right=True -> (left, right]
+        bins = pd.cut(score, bins=5, precision=0, retbins=True)[1]
+        intervals = pd.Series([
+            pd.Interval(bins[i], bins[i+1], closed="right") for i in range(len(bins)-1)
+        ])
+        result = calc_bin_metrics(y, score, intervals)
+        last_cum = result["cum_bads_prop"].iloc[-1]
+        assert abs(last_cum - 1.0) < 0.001, f"Expected ~1.0, got {last_cum}"
+
+    def test_cum_bads_prop_reaches_one_left_closed(self):
+        """cum_bads_prop should reach 1.0 — last bin extended with inf."""
+        y = np.array([0, 0, 0, 0, 1, 0, 1, 0, 1, 1])
+        score = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        bins = pd.Series([
+            pd.Interval(0.0, 0.3, closed="left"),
+            pd.Interval(0.3, 0.7, closed="left"),
+            pd.Interval(0.7, float("inf"), closed="left"),
+        ])
+        result = calc_bin_metrics(y, score, bins)
+        last_cum = result["cum_bads_prop"].iloc[-1]
+        assert abs(last_cum - 1.0) < 0.001, f"Expected ~1.0, got {last_cum}"
+
+    def test_no_samples_in_other_bin(self):
+        """All samples should be assigned to a bin, none in 'other'."""
+        np.random.seed(42)
+        y = np.random.choice([0, 1], size=100, p=[0.8, 0.2])
+        score = np.random.uniform(400, 900, 100)
+        bins_edges = pd.cut(score, bins=5, retbins=True)[1]
+        intervals = pd.Series([
+            pd.Interval(bins_edges[i], bins_edges[i+1], closed="right")
+            for i in range(len(bins_edges)-1)
+        ])
+        result = calc_bin_metrics(y, score, intervals)
+        total_in_bins = result["total"].sum()
+        assert total_in_bins == len(y), f"Expected {len(y)}, got {total_in_bins}"
 
 
 class TestCalcScorePsi:
