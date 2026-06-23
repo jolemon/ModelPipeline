@@ -4,7 +4,7 @@ import pandas as pd
 from model_report.metrics import (
     calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_score_psi,
     calc_monthly_metrics, calc_var_psi, calc_var_iv, calc_var_ks,
-    calc_missing_rate,
+    calc_missing_rate, calculate_all_ks,
 )
 
 
@@ -203,6 +203,47 @@ class TestCalcVarKs:
         assert isinstance(ks, float)
         assert 0.0 <= ks <= 1.0
 
+    def test_ks_perfect_separation(self):
+        df = pd.DataFrame({
+            "target": [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+            "x":    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        })
+        ks = calc_var_ks(df, var="x", target_col="target")
+        assert ks == 1.0
+
+    def test_ks_non_numeric_skips(self):
+        df = pd.DataFrame({
+            "target": [0, 1, 0, 1],
+            "x": ["a", "b", "c", "d"],
+        })
+        ks = calc_var_ks(df, var="x", target_col="target")
+        assert ks == 0.0
+
+
+class TestCalculateAllKs:
+    def test_batch_ks_output(self):
+        df = pd.DataFrame({
+            "mob6_30": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0],
+            "feat_a": np.linspace(0, 1, 10),
+            "feat_b": np.linspace(0, 1, 10)[::-1],
+        })
+        result = calculate_all_ks(df, y_col="mob6_30", feature_cols=["feat_a", "feat_b"])
+        assert len(result) == 2
+        assert "variable" in result.columns
+        assert "ks_scipy" in result.columns
+        assert "ks_manual" in result.columns
+
+    def test_batch_ks_with_exclude(self):
+        df = pd.DataFrame({
+            "target": [0, 1, 0, 1],
+            "x1": [1.0, 2.0, 3.0, 4.0],
+            "x2": [4.0, 3.0, 2.0, 1.0],
+            "id": ["a", "b", "c", "d"],
+        })
+        result = calculate_all_ks(df, y_col="target", feature_cols=["x1", "x2", "id"])
+        # id is non-numeric, should be skipped
+        assert len(result) == 2
+
 
 class TestCalcMissingRate:
     def test_normal_missing(self):
@@ -211,8 +252,9 @@ class TestCalcMissingRate:
         assert rate == 0.4
 
     def test_special_missing_values(self):
-        s = pd.Series([1.0, -999999.0, 2.0, -99998.0, 3.0])
-        rate = calc_missing_rate(s, special_values=[-999999.0, -99998.0, -99999.0])
+        s = pd.Series([1.0, -999999.0, 2.0, -100000.0, 3.0])
+        rate = calc_missing_rate(s)
+        # -999999 and -100000 are <= -99999 → treated as missing
         assert rate == 0.4
 
     def test_no_missing(self):

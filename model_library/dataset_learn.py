@@ -4,6 +4,9 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import toad
 from toad.stats import feature_bin_stats
+from scipy import stats
+import time
+
 
 def fillna_strategy(df, feature_columns):
     # 动态生成填充字典
@@ -504,3 +507,129 @@ def monotonic_binning(dataset, feat, target='target', good=0, bad=1,
     cols = ['min', 'max', 'goods', 'bads', 'total', 'good_prop', 'bad_prop', 'bad_rate', 'woe', 'iv', 'ks', 'lift']
     result = result[cols]
     return result
+
+
+
+
+def calculate_all_ks(df, y_col='Y', exclude_cols=None, min_samples=50, plot_top_n=5, verbose=True, feature_cols=[]):
+    """
+    计算DataFrame中所有变量对目标Y的KS值
+    
+    参数:
+    df: pandas DataFrame，包含特征变量和目标变量
+    y_col: str，目标变量列名（1表示坏客户，0表示好客户）
+    exclude_cols: list，需要排除的列名列表（如ID列等）
+    min_samples: int，计算KS所需的最小样本量
+    plot_top_n: int，绘制KS曲线的前N个变量
+    verbose: bool，是否打印详细信息
+    
+    返回:
+    ks_results: DataFrame，包含每个变量的KS值、p值等信息
+    """
+    start_time = time.time()
+    
+    # 确保目标变量存在
+    if y_col not in df.columns:
+        raise ValueError(f"目标变量 '{y_col}' 不在DataFrame的列中")
+    
+    # 确定需要计算KS的变量列表
+    if exclude_cols is None:
+        exclude_cols = []
+    exclude_cols = list(set(exclude_cols + [y_col]))
+    
+    # 获取所有需要计算KS的变量 
+    
+    if verbose:
+        print(f"开始计算{len(feature_cols)}个变量的KS值...")
+        print(f"目标变量: {y_col}")
+        print(f"排除变量: {exclude_cols}")
+    
+    # 存储结果
+    ks_results = []
+    
+    # 分离好客户和坏客户
+    good = df[df[y_col] == 0]
+    bad = df[df[y_col] == 1]
+    
+    total_good = len(good)
+    total_bad = len(bad)
+    
+    if verbose:
+        print(f"样本总数: {len(df)}")
+        print(f"好客户数量: {total_good} ({total_good/len(df):.2%})")
+        print(f"坏客户数量: {total_bad} ({total_bad/len(df):.2%})")
+    
+    # 检查是否有足够的样本
+    if total_good < min_samples or total_bad < min_samples:
+        raise ValueError(f"好客户或坏客户样本量不足({min_samples}个)，无法计算KS值")
+     
+    
+    # 遍历每个变量计算KS
+    for i, col in enumerate(feature_cols):
+        try:
+            # 检查变量是否为数值型
+            if not np.issubdtype(df[col].dtype, np.number):
+                if verbose:
+                    print(f"跳过非数值变量: {col}")
+                continue
+            
+            # 检查是否有足够的非缺失值
+            valid_good = good[col].dropna()
+            valid_bad = bad[col].dropna()
+            
+            if len(valid_good) < min_samples or len(valid_bad) < min_samples:
+                if verbose:
+                    print(f"变量 {col} 的好客户或坏客户样本量不足，跳过")
+                continue
+            
+            # 计算KS值（使用scipy的ks_2samp）
+            ks_stat, p_value = stats.ks_2samp(valid_bad, valid_good)
+            
+            # 另一种计算方式（手动计算，与风控常用方法一致）
+            # 将数据按变量值排序
+            df_sorted = df[[col, y_col]].dropna().sort_values(by=col, ascending=False)
+            
+            # 计算累积分布
+            df_sorted['cum_count'] = range(1, len(df_sorted) + 1)
+            df_sorted['cum_bad'] = df_sorted[y_col].cumsum()
+            df_sorted['cum_good'] = df_sorted['cum_count'] - df_sorted[y_col]
+            
+            # 计算累积比例
+            df_sorted['cum_pct_bad'] = df_sorted['cum_bad'] / total_bad
+            df_sorted['cum_pct_good'] = df_sorted['cum_good'] / total_good
+            
+            # 计算KS值
+            df_sorted['ks'] = np.abs(df_sorted['cum_pct_bad'] - df_sorted['cum_pct_good'])
+            ks_manual = df_sorted['ks'].max()
+            
+            # 找到KS值对应的位置
+            ks_point = df_sorted[df_sorted['ks'] == ks_manual].iloc[0]
+            
+            # 存储结果
+            ks_results.append({
+                'variable': col,
+                'ks_scipy': ks_stat,
+                'ks_manual': ks_manual,
+                'p_value': p_value,
+                'ks_threshold': ks_point[col],
+                'bad_pct_at_ks': ks_point['cum_pct_bad'],
+                'good_pct_at_ks': ks_point['cum_pct_good'],
+                'sample_size': len(df_sorted),
+                'missing_rate': 1 - len(df_sorted)/len(df)
+            }) 
+                
+        except Exception as e:
+            if verbose:
+                print(f"计算变量 {col} 的KS值时出错: {str(e)}")
+            continue
+    
+    # 转换为DataFrame并按KS值排序
+    ks_df = pd.DataFrame(ks_results).sort_values(by='ks_manual', ascending=False)
+     
+    if verbose:
+        print(f"\nKS值计算完成! 共处理 {len(feature_cols)} 个变量，成功计算 {len(ks_df)} 个变量的KS值")
+        print(f"计算耗时: {time.time() - start_time:.2f} 秒")
+        print(f"KS值范围: {ks_df['ks_manual'].min():.4f} - {ks_df['ks_manual'].max():.4f}")
+        print(f"平均KS值: {ks_df['ks_manual'].mean():.4f}")
+    
+    return ks_df

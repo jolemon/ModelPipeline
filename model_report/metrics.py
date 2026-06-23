@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics import roc_auc_score, roc_curve
+from scipy import stats
 
 
 def calc_auc(y_true, y_score) -> float:
@@ -192,20 +193,26 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
 
 
-SPECIAL_MISSING_VALUES = [-999999.0, -99999.0, -99998.0, -9999.0, -999.0]
+SPECIAL_MISSING_THRESHOLD = -99999
 
 
-def calc_missing_rate(series, special_values=None) -> float:
-    """Calculate missing rate treating NaN and special values as missing."""
-    if special_values is None:
-        special_values = SPECIAL_MISSING_VALUES
+def calc_missing_rate(series, threshold=None) -> float:
+    """Calculate missing rate treating NaN and values <= threshold as missing.
+
+    Per project convention, values <= -99999 are treated as missing.
+    """
+    import pandas as pd
+
+    if threshold is None:
+        threshold = SPECIAL_MISSING_THRESHOLD
 
     total = len(series)
     if total == 0:
         return 0.0
 
-    nan_mask = series.isna()
-    special_mask = series.isin(special_values) if special_values else pd.Series(False, index=series.index)
+    numeric = pd.to_numeric(series, errors="coerce")
+    nan_mask = numeric.isna()
+    special_mask = numeric <= threshold
     missing_count = (nan_mask | special_mask).sum()
     return float(missing_count / total)
 
@@ -257,8 +264,109 @@ def calc_var_iv(df, var: str, target_col: str = "mob6_30") -> float:
 
 
 def calc_var_ks(df, var: str, target_col: str = "mob6_30") -> float:
-    """Calculate KS for a single variable on the given dataset."""
+    """Calculate KS for a single variable using scipy ks_2samp.
+
+    Adapted from model_library/dataset_learn.py calculate_all_ks.
+    Uses scipy.stats.ks_2samp between good and bad distributions.
+    """
+    import pandas as pd
+
     try:
-        return float(calc_ks(df[target_col], df[var].fillna(0)))
-    except (ValueError, KeyError):
+        if var not in df.columns or target_col not in df.columns:
+            return 0.0
+        if not np.issubdtype(df[var].dtype, np.number):
+            return 0.0
+
+        good = df.loc[df[target_col] == 0, var].dropna()
+        bad = df.loc[df[target_col] == 1, var].dropna()
+
+        if len(good) < 2 or len(bad) < 2:
+            return 0.0
+
+        ks_stat, _ = stats.ks_2samp(bad, good)
+        return float(ks_stat)
+    except Exception:
         return 0.0
+
+
+def calculate_all_ks(df, y_col: str = "mob6_30",
+                     feature_cols=None, verbose: bool = False) -> "pd.DataFrame":
+    """Batch compute KS for all feature variables.
+
+    Adapted from model_library/dataset_learn.py calculate_all_ks.
+
+    Args:
+        df: DataFrame with features and target.
+        y_col: Target column name (1 = bad).
+        feature_cols: List of feature column names. If None, auto-detect.
+        verbose: Print progress info.
+
+    Returns:
+        DataFrame with columns: variable, ks_scipy, ks_manual, p_value,
+        ks_threshold, bad_pct_at_ks, good_pct_at_ks, sample_size, missing_rate.
+    """
+    import pandas as pd
+    import time
+
+    if feature_cols is None:
+        feature_cols = [c for c in df.columns if c != y_col
+                        and np.issubdtype(df[c].dtype, np.number)]
+
+    good = df[df[y_col] == 0]
+    bad = df[df[y_col] == 1]
+    total_good = len(good)
+    total_bad = len(bad)
+
+    if total_bad < 2 or total_good < 2:
+        return pd.DataFrame()
+
+    results = []
+    for col in feature_cols:
+        try:
+            if not np.issubdtype(df[col].dtype, np.number):
+                continue
+
+            valid_bad = bad[col].dropna()
+            valid_good = good[col].dropna()
+
+            if len(valid_bad) < 2 or len(valid_good) < 2:
+                continue
+
+            # scipy KS test
+            ks_stat, p_value = stats.ks_2samp(valid_bad, valid_good)
+
+            # Manual cumulative distribution KS (industry standard)
+            df_sorted = df[[col, y_col]].dropna().sort_values(by=col, ascending=False)
+            df_sorted = df_sorted.copy()
+            df_sorted["cum_bad"] = df_sorted[y_col].cumsum()
+            df_sorted["cum_good"] = df_sorted.index.to_series().apply(
+                lambda i: i + 1
+            ).values - df_sorted["cum_bad"].values
+            # Actually let's do it correctly:
+            df_sorted["cum_count"] = range(1, len(df_sorted) + 1)
+            df_sorted["cum_bad"] = df_sorted[y_col].cumsum()
+            df_sorted["cum_good"] = df_sorted["cum_count"] - df_sorted[y_col]
+            df_sorted["cum_pct_bad"] = df_sorted["cum_bad"] / total_bad
+            df_sorted["cum_pct_good"] = df_sorted["cum_good"] / total_good
+            df_sorted["ks"] = np.abs(df_sorted["cum_pct_bad"] - df_sorted["cum_pct_good"])
+            ks_manual = df_sorted["ks"].max()
+            ks_point = df_sorted[df_sorted["ks"] == ks_manual].iloc[0]
+
+            results.append({
+                "variable": col,
+                "ks_scipy": round(ks_stat, 4),
+                "ks_manual": round(ks_manual, 4),
+                "p_value": p_value,
+                "ks_threshold": ks_point[col],
+                "bad_pct_at_ks": round(ks_point["cum_pct_bad"], 4),
+                "good_pct_at_ks": round(ks_point["cum_pct_good"], 4),
+                "sample_size": len(df_sorted),
+                "missing_rate": round(1 - len(df_sorted) / len(df), 4),
+            })
+
+        except Exception as e:
+            if verbose:
+                print(f"KS calc error for {col}: {e}")
+            continue
+
+    return pd.DataFrame(results).sort_values("ks_manual", ascending=False)

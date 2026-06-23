@@ -54,10 +54,11 @@ class ReportConfig:
         return [c for c in df_columns if c not in non_vars]
 
     def resolve_score_column(self, df_columns: list) -> str:
-        """Resolve the best available score column for metrics calculation.
+        """Resolve the score column for metrics calculation.
 
-        Returns score_col if present in df_columns, otherwise falls back to sc_score_col.
+        Uses sc_score_col (scorecard_score) as the primary metric score.
+        Falls back to score_col if sc_score_col is not present.
         """
-        if self.score_col in df_columns:
-            return self.score_col
-        return self.sc_score_col
+        if self.sc_score_col in df_columns:
+            return self.sc_score_col
+        return self.score_col

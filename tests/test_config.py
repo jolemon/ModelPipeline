@@ -34,18 +34,20 @@ class TestReportConfig:
                      "pred_score", "scorecard_score"]:
             assert col in non_vars
 
-    def test_resolve_score_column_exists(self):
+    def test_resolve_score_column_prefers_sc_score(self):
         cfg = ReportConfig()
         df_cols = ["part_id", "mob6_30", "pred_score", "scorecard_score"]
-        assert cfg.resolve_score_column(df_cols) == "pred_score"
-
-    def test_resolve_score_column_fallback(self):
-        cfg = ReportConfig()
-        df_cols = ["part_id", "mob6_30", "scorecard_score"]
-        # pred_score not in df, falls back to scorecard_score
+        # sc_score_col takes priority
         assert cfg.resolve_score_column(df_cols) == "scorecard_score"
+
+    def test_resolve_score_column_fallback_to_score(self):
+        cfg = ReportConfig()
+        df_cols = ["part_id", "mob6_30", "pred_score"]
+        # sc_score_col not in df, falls back to score_col
+        assert cfg.resolve_score_column(df_cols) == "pred_score"
 
     def test_resolve_score_column_neither(self):
         cfg = ReportConfig()
         df_cols = ["part_id", "mob6_30"]
-        assert cfg.resolve_score_column(df_cols) == "scorecard_score"
+        # neither sc_score_col nor score_col exists, returns score_col
+        assert cfg.resolve_score_column(df_cols) == "pred_score"
