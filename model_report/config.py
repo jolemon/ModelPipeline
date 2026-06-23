@@ -52,3 +52,12 @@ class ReportConfig:
         """Extract feature column names from DataFrame columns."""
         non_vars = set(self.get_non_variable_columns())
         return [c for c in df_columns if c not in non_vars]
+
+    def resolve_score_column(self, df_columns: list) -> str:
+        """Resolve the best available score column for metrics calculation.
+
+        Returns score_col if present in df_columns, otherwise falls back to sc_score_col.
+        """
+        if self.score_col in df_columns:
+            return self.score_col
+        return self.sc_score_col

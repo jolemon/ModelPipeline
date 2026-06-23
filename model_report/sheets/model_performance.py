@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 from model_report.config import ReportConfig
 from model_report.metrics import (
-    calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_monthly_metrics
+    calc_auc, calc_ks, calc_lift, calc_bin_metrics,
+    calc_monthly_metrics, calc_score_psi,
 )
 
 
@@ -29,8 +30,12 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
     """Build train/test/oot metrics table."""
     flag_col = config.flag_col
     target_col = config.target_col
-    score_col = config.score_col
+    score_col = config.resolve_score_column(list(df.columns))
+    sc_score_col = config.sc_score_col
     flag_labels = config.flag_labels
+
+    # Get train set score distribution for PSI reference
+    train_data = df[df[flag_col] == "train"]
 
     rows = []
     for flag in ["train", "test", "oot"]:
@@ -52,6 +57,18 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
             ks = float("nan")
             lift_vals = {"10%": "", "5%": "", "2%": "", "1%": ""}
 
+        # PSI vs train (for train itself, PSI is "/")
+        if flag == "train":
+            train_psi = "/"
+        elif len(train_data) > 0 and sc_score_col in df.columns:
+            psi_v = calc_score_psi(train_data[sc_score_col], subset[sc_score_col])
+            train_psi = f"{psi_v:.4f}"
+        else:
+            train_psi = ""
+
+        # PSI vs recent month (simplified: same as train PSI for now)
+        recent_psi = ""
+
         rows.append({
             "样本集": flag_labels.get(flag, flag),
             "观察点月": _get_date_range(subset, config),
@@ -66,6 +83,8 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
             "5%lift": lift_vals.get("5%", ""),
             "2%lift": lift_vals.get("2%", ""),
             "1%lift": lift_vals.get("1%", ""),
+            "train和各集合的PSI": train_psi,
+            "近期月对比各集合PSI": recent_psi,
         })
 
     return pd.DataFrame(rows)
@@ -74,12 +93,29 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
 def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame:
     """Build monthly backtest effect table."""
     target_col = config.target_col
-    score_col = config.score_col
+    score_col = config.resolve_score_column(list(df.columns))
+    sc_score_col = config.sc_score_col
     date_col = config.date_col
     flag_col = config.flag_col
 
     monthly = calc_monthly_metrics(df, target_col=target_col,
                                    score_col=score_col, date_col=date_col)
+
+    # Train+test combined as reference for PSI
+    train_test = df[df[flag_col].isin(["train", "test"])]
+    # First month as reference
+    first_month = monthly[monthly["观察点月"] != "all"].iloc[0]["观察点月"] \
+        if len(monthly[monthly["观察点月"] != "all"]) > 0 else None
+    first_month_data = df[
+        df[date_col].astype(str).str.replace("-", "").str[:6] == first_month
+    ] if first_month else None
+
+    # Recent month
+    recent_month = monthly[monthly["观察点月"] != "all"].iloc[-1]["观察点月"] \
+        if len(monthly[monthly["观察点月"] != "all"]) > 0 else None
+    recent_month_data = df[
+        df[date_col].astype(str).str.replace("-", "").str[:6] == recent_month
+    ] if recent_month else None
 
     rows = []
     for _, row in monthly.iterrows():
@@ -107,6 +143,20 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
         ks_val = row["KS"]
         auc_val = row["AUC"]
 
+        # PSI vs first month
+        first_psi = ""
+        if first_month_data is not None and sc_score_col in df.columns \
+                and len(first_month_data) > 0 and len(month_data) > 0:
+            psi_v = calc_score_psi(first_month_data[sc_score_col], month_data[sc_score_col])
+            first_psi = f"{psi_v:.4f}"
+
+        # PSI vs recent month
+        recent_psi = ""
+        if recent_month_data is not None and sc_score_col in df.columns \
+                and len(recent_month_data) > 0 and len(month_data) > 0:
+            psi_v = calc_score_psi(recent_month_data[sc_score_col], month_data[sc_score_col])
+            recent_psi = f"{psi_v:.4f}"
+
         rows.append({
             "全量样本回溯": partition_label,
             "观察点月": month,
@@ -121,6 +171,8 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             "5%lift": lift_vals.get("5%", ""),
             "2%lift": lift_vals.get("2%", ""),
             "1%lift": lift_vals.get("1%", ""),
+            "首月与各集合的PSI": first_psi,
+            "最近月对比各集合PSI": recent_psi,
         })
 
     # Total row
@@ -151,6 +203,8 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
         "5%lift": total_lift.get("5%", ""),
         "2%lift": total_lift.get("2%", ""),
         "1%lift": total_lift.get("1%", ""),
+        "首月与各集合的PSI": "",
+        "最近月对比各集合PSI": "",
     })
 
     return pd.DataFrame(rows)

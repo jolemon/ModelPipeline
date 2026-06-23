@@ -117,12 +117,16 @@ def calc_score_psi(expected_scores, actual_scores, bins: int = 10) -> float:
 
     min_val = min(expected.min(), actual.min())
     max_val = max(expected.max(), actual.max())
+
+    if max_val <= min_val:
+        return 0.0
+
     bin_edges = np.linspace(min_val, max_val, bins + 1)
     bin_edges[0] = -np.inf
     bin_edges[-1] = np.inf
 
-    expected_binned = pd.cut(expected, bins=bin_edges)
-    actual_binned = pd.cut(actual, bins=bin_edges)
+    expected_binned = pd.cut(expected, bins=bin_edges, duplicates="drop")
+    actual_binned = pd.cut(actual, bins=bin_edges, duplicates="drop")
 
     expected_counts = expected_binned.value_counts().sort_index()
     actual_counts = actual_binned.value_counts().sort_index()
@@ -186,3 +190,75 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
         })
 
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
+
+
+SPECIAL_MISSING_VALUES = [-999999.0, -99999.0, -99998.0, -9999.0, -999.0]
+
+
+def calc_missing_rate(series, special_values=None) -> float:
+    """Calculate missing rate treating NaN and special values as missing."""
+    if special_values is None:
+        special_values = SPECIAL_MISSING_VALUES
+
+    total = len(series)
+    if total == 0:
+        return 0.0
+
+    nan_mask = series.isna()
+    special_mask = series.isin(special_values) if special_values else pd.Series(False, index=series.index)
+    missing_count = (nan_mask | special_mask).sum()
+    return float(missing_count / total)
+
+
+def calc_var_psi(train_series, oot_series) -> float:
+    """Calculate PSI for a single variable between train and oot distributions."""
+    import pandas as pd
+
+    train_s = pd.Series(train_series).dropna()
+    oot_s = pd.Series(oot_series).dropna()
+
+    if len(train_s) == 0 or len(oot_s) == 0:
+        return 0.0
+
+    # Equal-frequency binning PSI - always bin on train data edges
+    combined = pd.concat([train_s, oot_s])
+    try:
+        _, bin_edges = pd.qcut(train_s, q=10, duplicates="drop", retbins=True)
+        train_binned = pd.cut(train_s, bins=bin_edges)
+        oot_binned = pd.cut(oot_s, bins=bin_edges)
+
+        train_dist = train_binned.value_counts().sort_index()
+        oot_dist = oot_binned.value_counts().sort_index()
+
+        train_pct = (train_dist / train_dist.sum()).fillna(0)
+        oot_pct = (oot_dist / oot_dist.sum()).fillna(0)
+
+        all_idx = train_pct.index.union(oot_pct.index)
+        train_aligned = train_pct.reindex(all_idx, fill_value=1e-10)
+        oot_aligned = oot_pct.reindex(all_idx, fill_value=1e-10)
+
+        psi_val = np.sum((oot_aligned - train_aligned) * np.log(oot_aligned / train_aligned))
+        return float(max(psi_val, 0.0))
+    except Exception:
+        return 0.0
+
+
+def calc_var_iv(df, var: str, target_col: str = "mob6_30") -> float:
+    """Calculate IV for a single variable on the given dataset."""
+    try:
+        from toad import quality
+        iv_result = quality(df[[var, target_col]], target_col, iv_only=True)
+        if isinstance(iv_result, pd.Series):
+            val = iv_result.get(var, 0.0)
+            return float(val) if not np.isnan(float(val)) else 0.0
+        return float(iv_result) if iv_result else 0.0
+    except Exception:
+        return 0.0
+
+
+def calc_var_ks(df, var: str, target_col: str = "mob6_30") -> float:
+    """Calculate KS for a single variable on the given dataset."""
+    try:
+        return float(calc_ks(df[target_col], df[var].fillna(0)))
+    except (ValueError, KeyError):
+        return 0.0

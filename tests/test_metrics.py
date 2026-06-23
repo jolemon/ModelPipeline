@@ -1,7 +1,11 @@
 import pytest
 import numpy as np
 import pandas as pd
-from model_report.metrics import calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_score_psi, calc_monthly_metrics
+from model_report.metrics import (
+    calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_score_psi,
+    calc_monthly_metrics, calc_var_psi, calc_var_iv, calc_var_ks,
+    calc_missing_rate,
+)
 
 
 class TestCalcAuc:
@@ -144,3 +148,74 @@ class TestCalcMonthlyMetrics:
                                       score_col="pred_score",
                                       date_col="loan_date")
         assert len(result) >= 3
+
+
+class TestCalcVarPsi:
+    def test_identical_distributions(self):
+        np.random.seed(42)
+        train = pd.Series(np.random.normal(0, 1, 1000))
+        oot = train.copy()
+        psi = calc_var_psi(train, oot)
+        assert psi < 0.01
+
+    def test_different_distributions(self):
+        np.random.seed(42)
+        train = pd.Series(np.random.normal(0, 1, 1000))
+        oot = pd.Series(np.random.normal(1, 2, 1000))
+        psi = calc_var_psi(train, oot)
+        assert psi > 0.01
+
+    def test_returns_float(self):
+        psi = calc_var_psi(
+            pd.Series(np.random.normal(0, 1, 100)),
+            pd.Series(np.random.normal(0.1, 1.1, 100)),
+        )
+        assert isinstance(psi, float)
+
+
+class TestCalcVarIv:
+    def test_iv_on_dataframe(self):
+        df = pd.DataFrame({
+            "mob6_30": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0],
+            "feat_a": np.random.normal(0, 1, 10),
+            "feat_b": np.random.normal(5, 2, 10),
+        })
+        iv = calc_var_iv(df, var="feat_a", target_col="mob6_30")
+        assert isinstance(iv, float)
+        assert iv >= 0
+
+    def test_iv_returns_float(self):
+        df = pd.DataFrame({
+            "target": [0, 0, 1, 1],
+            "x": [1.0, 2.0, 3.0, 4.0],
+        })
+        iv = calc_var_iv(df, var="x", target_col="target")
+        assert isinstance(iv, float)
+
+
+class TestCalcVarKs:
+    def test_ks_on_dataframe(self):
+        df = pd.DataFrame({
+            "mob6_30": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0],
+            "feat_a": np.linspace(0, 1, 10),
+        })
+        ks = calc_var_ks(df, var="feat_a", target_col="mob6_30")
+        assert isinstance(ks, float)
+        assert 0.0 <= ks <= 1.0
+
+
+class TestCalcMissingRate:
+    def test_normal_missing(self):
+        s = pd.Series([1.0, 2.0, np.nan, 4.0, np.nan])
+        rate = calc_missing_rate(s)
+        assert rate == 0.4
+
+    def test_special_missing_values(self):
+        s = pd.Series([1.0, -999999.0, 2.0, -99998.0, 3.0])
+        rate = calc_missing_rate(s, special_values=[-999999.0, -99998.0, -99999.0])
+        assert rate == 0.4
+
+    def test_no_missing(self):
+        s = pd.Series([1.0, 2.0, 3.0, 4.0])
+        rate = calc_missing_rate(s)
+        assert rate == 0.0

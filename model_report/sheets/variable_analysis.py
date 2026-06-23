@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 from model_report.config import ReportConfig
+from model_report.metrics import (
+    calc_var_psi, calc_var_iv, calc_var_ks, calc_missing_rate,
+)
 
 
 def build_variable_analysis_sheet(
@@ -53,17 +56,29 @@ def _build_variable_overview(
         var_meta = metadata.get(var, {})
         dtype = str(data[var].dtype)
 
-        # Missing rate
-        missing_train = train_data[var].isna().mean() if len(train_data) > 0 else 0
-        missing_oot = oot_data[var].isna().mean() if len(oot_data) > 0 else 0
+        # Missing rate (including special missing values)
+        missing_train = calc_missing_rate(train_data[var]) if len(train_data) > 0 else 0
+        missing_oot = calc_missing_rate(oot_data[var]) if len(oot_data) > 0 else 0
 
         # IV
         iv_train = float(iv_table.get(var, np.nan)) if isinstance(iv_table, pd.Series) else np.nan
         iv_train_val = round(iv_train, 2) if not np.isnan(iv_train) else ""
 
+        # OOT IV
+        oot_iv = calc_var_iv(oot_data, var, config.target_col) if len(oot_data) > 0 else np.nan
+        oot_iv_val = round(oot_iv, 2) if not np.isnan(oot_iv) and oot_iv != 0 else ""
+
         # KS
         ks_train = float(ks_table.get(var, np.nan)) if isinstance(ks_table, pd.Series) else np.nan
         ks_train_val = round(ks_train, 2) if not np.isnan(ks_train) else ""
+
+        # OOT KS
+        oot_ks = calc_var_ks(oot_data, var, config.target_col) if len(oot_data) > 0 else np.nan
+        oot_ks_val = round(oot_ks, 2) if not np.isnan(oot_ks) and oot_ks != 0 else ""
+
+        # PSI
+        psi_val = calc_var_psi(train_data[var], oot_data[var]) if len(train_data) > 0 and len(oot_data) > 0 else 0
+        psi_str = f"{psi_val:.4f}" if psi_val > 0 else ""
 
         rows.append({
             "序号": idx,
@@ -75,10 +90,10 @@ def _build_variable_overview(
             "缺失率_train": f"{missing_train:.2%}",
             "缺失率_oot": f"{missing_oot:.2%}",
             "iv_train": iv_train_val,
-            "iv_oot": "",
+            "iv_oot": oot_iv_val,
             "ks_train": ks_train_val,
-            "ks_oot": "",
-            "psi": "",
+            "ks_oot": oot_ks_val,
+            "psi": psi_str,
         })
 
     df = pd.DataFrame(rows)
