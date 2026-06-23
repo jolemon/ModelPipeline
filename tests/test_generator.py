@@ -63,3 +63,85 @@ class TestReportGenerator:
         gen = ReportGenerator(mock_scorecard, config)
         result = gen.generate(small_df)
         assert isinstance(result, dict)
+
+    def test_generate_without_scorecard(self, small_df):
+        """Without scorecard, all sheets should still generate."""
+        config = ReportConfig(
+            target_col="mob6_30",
+            flag_col="data_flag",
+            partition_col="part_id",
+            date_col="loan_date",
+            score_col="pred_score",
+            sc_score_col="scorecard_score",
+        )
+        gen = ReportGenerator(None, config)
+        result = gen.generate(small_df)
+        assert config.sheet1_name in result
+        assert config.sheet2_name in result
+        assert config.sheet3_name in result
+
+    def test_without_scorecard_no_woe_tables(self, small_df):
+        """Without scorecard, top10 WOE tables should be empty."""
+        config = ReportConfig(
+            target_col="mob6_30",
+            flag_col="data_flag",
+            partition_col="part_id",
+            date_col="loan_date",
+            score_col="pred_score",
+            sc_score_col="scorecard_score",
+        )
+        gen = ReportGenerator(None, config)
+        result = gen.generate(small_df)
+        sheet2 = result[config.sheet2_name]
+        assert sheet2["top10_woe_bins"] == []
+
+    def test_without_scorecard_iv_train_empty(self, small_df):
+        """Without scorecard, iv_train and ks_train should be empty."""
+        config = ReportConfig(
+            target_col="mob6_30",
+            flag_col="data_flag",
+            partition_col="part_id",
+            date_col="loan_date",
+            score_col="pred_score",
+            sc_score_col="scorecard_score",
+        )
+        gen = ReportGenerator(None, config)
+        result = gen.generate(small_df)
+        overview = result[config.sheet2_name]["ivar_ks_psi_overview"]
+        assert overview["iv_train"].iloc[0] == ""
+        assert overview["ks_train"].iloc[0] == ""
+
+    def test_without_scorecard_no_detail(self, small_df):
+        """Without scorecard, scorecard_detail should be None."""
+        config = ReportConfig(
+            target_col="mob6_30",
+            flag_col="data_flag",
+            partition_col="part_id",
+            date_col="loan_date",
+            score_col="pred_score",
+            sc_score_col="scorecard_score",
+        )
+        gen = ReportGenerator(None, config)
+        result = gen.generate(small_df)
+        sheet3 = result[config.sheet3_name]
+        assert sheet3["scorecard_detail"] is None or sheet3["scorecard_detail"].empty
+
+    def test_to_excel_without_scorecard(self, small_df):
+        """Without scorecard, Excel should still be generated."""
+        config = ReportConfig(
+            target_col="mob6_30",
+            flag_col="data_flag",
+            partition_col="part_id",
+            date_col="loan_date",
+            score_col="pred_score",
+            sc_score_col="scorecard_score",
+        )
+        gen = ReportGenerator(None, config)
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            output_path = f.name
+        try:
+            gen.to_excel(output_path, small_df)
+            assert Path(output_path).exists()
+            assert Path(output_path).stat().st_size > 0
+        finally:
+            Path(output_path).unlink()

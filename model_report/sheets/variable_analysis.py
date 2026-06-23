@@ -12,23 +12,29 @@ def build_variable_analysis_sheet(
     config: ReportConfig,
     metadata: dict,
 ) -> dict:
-    """Build Sheet 2: Variable Analysis."""
+    """Build Sheet 2: Variable Analysis.
+
+    If scorecard is None, iv_train/ks_train are empty and top10 WOE tables
+    are skipped. Data-driven metrics (missing_rate, iv_oot, ks_oot, psi)
+    are always computed.
+    """
     feature_cols = config.get_feature_columns(list(data.columns))
-    iv_table = scorecard.get_iv_table()
-    ks_table = scorecard.get_ks_table()
+    iv_table = scorecard.get_iv_table() if scorecard is not None else pd.Series([], dtype=float)
+    ks_table = scorecard.get_ks_table() if scorecard is not None else pd.Series([], dtype=float)
 
     # 2.1 Variable overview
     overview = _build_variable_overview(data, feature_cols, iv_table, ks_table,
                                         scorecard, config, metadata)
 
-    # 2.2 Top N WOE tables
-    top_n = config.top_n_vars
-    top_vars = overview.head(top_n)["变量名"].tolist()
+    # 2.2 Top N WOE tables (only if scorecard available)
     top10 = []
-    for var in top_vars:
-        woe_df = scorecard.get_woe_table(var)
-        if woe_df is not None and not woe_df.empty:
-            top10.append((var, _format_woe_table(woe_df)))
+    if scorecard is not None:
+        top_n = config.top_n_vars
+        top_vars = overview.head(top_n)["变量名"].tolist()
+        for var in top_vars:
+            woe_df = scorecard.get_woe_table(var)
+            if woe_df is not None and not woe_df.empty:
+                top10.append((var, _format_woe_table(woe_df)))
 
     return {
         "ivar_ks_psi_overview": overview,

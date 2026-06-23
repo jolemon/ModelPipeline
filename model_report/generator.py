@@ -8,16 +8,26 @@ from model_report.sheets.model_performance import build_model_performance_sheet
 
 
 class ReportGenerator:
-    """Orchestrates the three sheet builders and writes the Excel report."""
+    """Orchestrates the three sheet builders and writes the Excel report.
 
-    def __init__(self, scorecard, config=None):
+    Args:
+        scorecard: Optional scorecard object implementing ScorecardProtocol.
+                   If None, scorecard-dependent content is skipped.
+        config: Optional ReportConfig with column mappings and labels.
+    """
+
+    def __init__(self, scorecard=None, config=None):
         self.scorecard = scorecard
         self.config = config if config is not None else ReportConfig()
         self._writer = ExcelWriter()
         self._metadata = {}
 
     def generate(self, data: pd.DataFrame, metadata_path=None) -> dict:
-        """Generate all report sheets as structured data."""
+        """Generate all report sheets as structured data.
+
+        If no scorecard is provided, Sheet 2 skips IV/KS/WOE from scorecard
+        (still computes data-driven metrics) and Sheet 3 skips scorecard detail.
+        """
         self._validate_data(data)
         self._metadata = load_variable_metadata(metadata_path)
 

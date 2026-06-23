@@ -12,8 +12,13 @@ def build_model_performance_sheet(
     scorecard,
     config: ReportConfig,
 ) -> dict:
-    """Build Sheet 3: Model Performance."""
-    detail = scorecard.get_model_summary()
+    """Build Sheet 3: Model Performance.
+
+    If scorecard is None, scorecard_detail is skipped (set to None).
+    Data-driven sections (sample_effect, backtest_effect, bin_performance)
+    are always computed.
+    """
+    detail = scorecard.get_model_summary() if scorecard is not None else None
     sample_effect = _build_sample_effect(data, config)
     backtest = _build_backtest_effect(data, config)
     bin_perf = _build_bin_performance(data, config)

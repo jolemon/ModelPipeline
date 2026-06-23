@@ -6,8 +6,8 @@ from model_report.generator import ReportGenerator
 
 
 @click.command()
-@click.option("--model", "-m", required=True, type=click.Path(exists=True),
-              help="Path to .pkl scorecard file.")
+@click.option("--model", "-m", required=False, type=click.Path(exists=True),
+              help="Optional path to .pkl scorecard file.")
 @click.option("--data", "-d", required=True, type=click.Path(exists=True),
               help="Path to scoring result CSV file.")
 @click.option("--output", "-o", default="./model_report.xlsx",
@@ -15,10 +15,18 @@ from model_report.generator import ReportGenerator
 @click.option("--metadata", type=click.Path(exists=True),
               help="Optional variable metadata CSV/YAML.")
 def main(model, data, output, metadata):
-    """Generate a model report Excel from scorecard and scoring data."""
+    """Generate a model report Excel from scorecard and scoring data.
+
+    If --model is not provided, scorecard-dependent content (IV/KS from
+    scorecard, WOE tables, scorecard detail) is skipped. Data-driven
+    metrics are still computed.
+    """
     report_config = ReportConfig()
 
-    scorecard = PickledScorecardAdapter(model)
+    if model:
+        scorecard = PickledScorecardAdapter(model)
+    else:
+        scorecard = None
 
     if data.endswith(".csv"):
         df = pd.read_csv(data)
