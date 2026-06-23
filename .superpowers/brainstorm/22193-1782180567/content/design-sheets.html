@@ -1,0 +1,96 @@
+<h2>设计 — 三个 Sheet 详细规格</h2>
+
+<div class="section">
+  <h3>Sheet 1 — 模型设计</h3>
+  <p class="subtitle">build_model_design_sheet(data, config) → dict[str, DataFrame]</p>
+
+  <div style="display:flex; gap:16px; flex-wrap:wrap;">
+    <div class="mockup" style="flex:1; min-width:280px;">
+      <div class="mockup-header">1.1 样本分区分布</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <strong>分组维度：</strong>data_flag × part_id<br/>
+        <strong>指标：</strong>好/坏/总数/坏占比<br/>
+        <strong>行序：</strong>按 part_id 排列，末尾 "总计" 行<br/>
+        <strong>来源：</strong>纯数据统计，不依赖 ScorecardProtocol
+      </div>
+    </div>
+    <div class="mockup" style="flex:1; min-width:280px;">
+      <div class="mockup-header">1.2 样本建模分</div>
+      <div class="mockup-body" style="font-size:13px;">
+        <strong>固定 4 行：</strong>训练集 / 测试集 / 跨时间验证集 / 总计<br/>
+        <strong>指标：</strong>好/坏/总数/坏占比<br/>
+        <strong>来源：</strong>纯数据统计，按 data_flag 聚合
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Sheet 2 — 变量分析</h3>
+  <p class="subtitle">build_variable_analysis_sheet(data, scorecard, config, metadata) → dict[str, DataFrame]</p>
+
+  <div class="mockup" style="margin-bottom:12px;">
+    <div class="mockup-header">2.1 变量 IV/KS/PSI 总览表</div>
+    <div class="mockup-body" style="font-size:13px;">
+      <strong>列：</strong>序号 | 变量名 | 变量解释含义←metadata | 来源←metadata | 表描述←metadata | 数据类型 | 缺失率_train | 缺失率_oot | iv_train | iv_oot | ks_train | ks_oot | psi<br/>
+      <strong>变量范围：</strong>所有数值特征列（排除配置中的非变量列）<br/>
+      <strong>数据来源：</strong>缺失率从 data 计算；IV/KS 从 scorecard.ivtable；PSI 从 scorecard 分箱 + data 分布计算
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">2.2 Top10 单变量 WOE 分箱分析</div>
+    <div class="mockup-body" style="font-size:13px;">
+      <strong>Top10 选取：</strong>按 IV_train 降序取前 10<br/>
+      <strong>每个变量一张表：</strong>min | max | goods | bads | total | good_prop | bad_prop | bad_rate | woe | iv | ks | lift<br/>
+      <strong>数据来源：</strong>scorecard.woetables[var]<br/>
+      <strong>格式要求：</strong>woe 列、bad_rate 列应用条件格式-数据条-实心填充
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Sheet 3 — 模型表现</h3>
+  <p class="subtitle">build_model_performance_sheet(data, scorecard, config) → dict[str, DataFrame]</p>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div class="mockup">
+      <div class="mockup-header">3.1 评分卡详情</div>
+      <div class="mockup-body" style="font-size:13px;">
+        来源：scorecard.model_result<br/>
+        列：Parameter | Estimate | Std-Error | Wald-Chi2 | P-value | P-value-num | Std | Std-Estimate | VIF
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">3.2 建模样本集效果</div>
+      <div class="mockup-body" style="font-size:13px;">
+        按 data_flag 分组 (train/test/oot)<br/>
+        列：样本集 | 观察点月 | 标签 | 总/好/坏/坏占比 | KS/AUC/lift (10%/5%/2%/1%) | PSI
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">3.3 全量回溯效果</div>
+      <div class="mockup-body" style="font-size:13px;">
+        按 part_id 逐月展开<br/>
+        列结构同 3.2<br/>
+        包含压测集（表现期未满的月份）
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">3.4 模型分箱表现</div>
+      <div class="mockup-body" style="font-size:13px;">
+        每个 partition (train/test/oot + 各月度) 一张表<br/>
+        列：min | max | bads | goods | total | bad_rate | cum_bad_rate | cum_bads_prop | ks | lift | cum_lift<br/>
+        lift 和 cum_lift 列需要条件格式-数据条
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>⚠️ 需要确认的计算</h3>
+  <div style="background:#fff8e1; padding:12px; border-radius:6px; font-size:14px; border-left:4px solid #ffc107;">
+    <p><strong>Sheet 3.2/3.3 中的 KS、AUC、lift 计算</strong>需要 pred_score 列。但 readme 也提到了 scorecard_score。3.2 的 "train和各集合的PSI" 和 "近期月对比各集合PSI" 计算逻辑需要明确。</p>
+    <p>这些指标是直接复用 scorecard 中已有的计算结果，还是报告生成器独立重算？</p>
+  </div>
+</div>

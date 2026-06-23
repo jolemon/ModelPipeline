@@ -1,0 +1,88 @@
+<h2>设计 — 接口、指标计算 & 错误处理</h2>
+
+<div class="section">
+  <h3>ScorecardProtocol 接口定义</h3>
+  <p class="subtitle">报告生成器只需要这些信息，来自 scorecard 对象</p>
+  <div style="background:var(--bg-secondary, #1e1e1e); color:#d4d4d4; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:1.6;">
+<span style="color:#569cd6;">class</span> <span style="color:#4ec9b0;">ScorecardProtocol</span>(<span style="color:#4ec9b0;">Protocol</span>):<br/>
+&nbsp;&nbsp;<span style="color:#6a9955;"># 变量分箱信息</span><br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_var_names</span>(self) <span style="color:#569cd6;">→</span> list[str]: ...<br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_bins</span>(self, var: str) <span style="color:#569cd6;">→</span> pd.Series: ...<br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_woe_table</span>(self, var: str) <span style="color:#569cd6;">→</span> pd.DataFrame: ...<br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_iv_table</span>(self) <span style="color:#569cd6;">→</span> pd.Series: ...<br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_ks_table</span>(self) <span style="color:#569cd6;">→</span> pd.Series: ...<br/>
+&nbsp;&nbsp;<span style="color:#6a9955;"># 模型信息</span><br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_model_summary</span>(self) <span style="color:#569cd6;">→</span> pd.DataFrame: ...  <span style="color:#6a9955;"># Parameter/Estimate/Std-Error/Wald-Chi2/P-value/VIF</span><br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_scorecard</span>(self) <span style="color:#569cd6;">→</span> pd.DataFrame: ...    <span style="color:#6a9955;"># name/left/right/score</span><br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_missing_dict</span>(self) <span style="color:#569cd6;">→</span> dict: ...<br/>
+&nbsp;&nbsp;<span style="color:#569cd6;">def</span> <span style="color:#dcdcaa;">get_dropped_vars</span>(self) <span style="color:#569cd6;">→</span> list[str]: ...
+  </div>
+</div>
+
+<div class="section">
+  <h3>独立计算的指标</h3>
+  <p class="subtitle">基于 pred_score + target 列，不依赖 scorecard 对象</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+    <div class="placeholder" style="text-align:center;">
+      <strong>KS</strong><br/>
+      <span style="font-size:12px;">scipy.stats.ks_2samp<br/>好/坏样本分数分布差异</span>
+    </div>
+    <div class="placeholder" style="text-align:center;">
+      <strong>AUC</strong><br/>
+      <span style="font-size:12px;">sklearn.metrics.roc_auc_score<br/>pred_score vs target</span>
+    </div>
+    <div class="placeholder" style="text-align:center;">
+      <strong>Lift</strong><br/>
+      <span style="font-size:12px;">按分数降序分 10/5/2/1 组<br/>组内 bad_rate / 整体 bad_rate</span>
+    </div>
+    <div class="placeholder" style="text-align:center;">
+      <strong>PSI (模型分)</strong><br/>
+      <span style="font-size:12px;">分箱后各箱占比分布<br/>train 与各集合对比</span>
+    </div>
+    <div class="placeholder" style="text-align:center;">
+      <strong>分箱表现</strong><br/>
+      <span style="font-size:12px;">scorecard_score 分箱<br/>逐箱累计指标</span>
+    </div>
+    <div class="placeholder" style="text-align:center;">
+      <strong>PSI (变量)</strong><br/>
+      <span style="font-size:12px;">train 分箱分布 vs<br/>oot 分箱分布</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>错误处理策略</h3>
+  <table style="width:100%; border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">缺少必需列</td>
+      <td style="padding:8px 12px;">抛 <code>DataValidationError</code>，列出缺失的列名</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">data_flag 缺少 train/test/oot</td>
+      <td style="padding:8px 12px;">抛 <code>DataValidationError</code>，提示哪些必需的 data_flag 值缺失</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">target 不是 {0,1}</td>
+      <td style="padding:8px 12px;">抛 <code>DataValidationError</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">变量元数据文件缺失</td>
+      <td style="padding:8px 12px;">Warning，相关列填空字符串，不中断报告生成</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">变量分箱信息缺失</td>
+      <td style="padding:8px 12px;">跳过该变量的 WOE 表，变量分析表中标注 "未分箱"</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px; font-weight:600;">压测集缺失</td>
+      <td style="padding:8px 12px;">可接受，3.3 中 oos 行不生成</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>⚠️ 新的依赖</h3>
+  <div style="background:#e3f2fd; padding:12px; border-radius:6px; font-size:14px; border-left:4px solid #2196f3;">
+    独立计算 KS/AUC/Lift 需要引入 <strong>scikit-learn</strong>（<code>roc_auc_score</code>）。目前项目只依赖 statsmodels + scipy。确认可以引入 sklearn 吗？
+  </div>
+</div>

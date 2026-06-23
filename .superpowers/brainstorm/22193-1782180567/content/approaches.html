@@ -1,0 +1,111 @@
+<h2>设计决策汇总</h2>
+
+<div class="section">
+  <table style="width:100%; border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">调用方式</td>
+      <td style="padding:8px 12px;">Python 库 + CLI 命令行</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">评分卡对接</td>
+      <td style="padding:8px 12px;">抽象接口/协议，pkl 路径为便捷方式之一</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">定制空间</td>
+      <td style="padding:8px 12px;">核心结构固定，列名/标签/分区名可配置</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">变量元数据</td>
+      <td style="padding:8px 12px;">CSV/YAML 变量清单文件</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px; font-weight:600;">设计原则</td>
+      <td style="padding:8px 12px;">默认代替配置</td>
+    </tr>
+  </table>
+</div>
+
+<h2>三种架构方案</h2>
+<p class="subtitle">点击选择一个方案</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>单体 ReportGenerator 类</h3>
+      <p>一个类 + ExcelWriter 工具，所有 sheet 生成逻辑在一个文件中。参考 scorecard_jsb.py 的风格，简单直接。</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>文件少，易于理解</li>
+          <li>适合初期快速迭代</li>
+          <li>与现有代码风格一致</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>文件会很大（3 个 sheet 逻辑 + Excel 格式化）</li>
+          <li>难以单独测试某个 sheet</li>
+          <li>后续扩展困难</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>按 Sheet 拆分模块</h3>
+      <p>每个 sheet 独立为一个模块，ReportGenerator 作为编排层。接口层独立。</p>
+      <div style="background:var(--bg-secondary, #f9f9f9); padding:12px; border-radius:6px; margin-top:8px; font-family:monospace; font-size:13px;">
+        model_report/<br/>
+        ├── __init__.py          # 公开 API<br/>
+        ├── cli.py               # CLI 入口<br/>
+        ├── interface.py         # ScorecardProtocol 抽象接口<br/>
+        ├── config.py            # 默认配置 + 列名映射<br/>
+        ├── metadata.py          # 变量清单加载<br/>
+        ├── generator.py         # ReportGenerator 编排器<br/>
+        ├── sheets/<br/>
+        │   ├── model_design.py  # Sheet 1<br/>
+        │   ├── variable_analysis.py  # Sheet 2<br/>
+        │   └── model_performance.py  # Sheet 3<br/>
+        └── writer.py            # Excel 写入 + 条件格式
+      </div>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>每个 sheet 独立可测</li>
+          <li>模块职责清晰</li>
+          <li>易于扩展新 sheet</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>文件较多</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>管道/中间数据模型</h3>
+      <p>在 B 的基础上，中间计算结果用 dataclass 明确定义。Sheet 生成器接收结构化中间数据而非原始 DataFrame。</p>
+      <div style="background:var(--bg-secondary, #f9f9f9); padding:12px; border-radius:6px; margin-top:8px; font-family:monospace; font-size:13px;">
+        model_report/<br/>
+        ├── ... (与 B 相同)<br/>
+        ├── models.py            # 中间数据 dataclass<br/>
+        │                        # PartitionStats, VariableStats,<br/>
+        │                        # ScorecardDetail, ModelEffect,<br/>
+        │                        # BinPerformance<br/>
+        └── sheets/ (同上)
+      </div>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>计算与展示完全解耦</li>
+          <li>中间数据可独立复用（如输出 JSON）</li>
+          <li>最佳可测试性</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>层级多，初期开发量稍大</li>
+          <li>dataclass 定义需要维护</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>
