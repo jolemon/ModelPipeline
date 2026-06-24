@@ -150,11 +150,13 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             to_month(df[date_col]) == month
         ]
 
-        flags_in_month = month_data[flag_col].unique()
-        if "oot" in flags_in_month:
-            partition_label = "跨时间验证集"
-        elif "oos" in flags_in_month:
-            partition_label = "压测"
+        # Label by majority flag in this month
+        dominant_flag = month_data[flag_col].value_counts().idxmax()
+        flag_labels = config.flag_labels
+        if dominant_flag == "oot":
+            partition_label = flag_labels.get("oot", "跨时间验证集")
+        elif dominant_flag == "oos":
+            partition_label = flag_labels.get("oos", "压测")
         else:
             partition_label = "训练测试集"
 
