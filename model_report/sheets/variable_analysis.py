@@ -15,9 +15,16 @@ def build_variable_analysis_sheet(
     """Build Sheet 2: Variable Analysis.
 
     All metrics are computed directly from the scoring data.
-    The scorecard parameter is ignored (kept for API compatibility).
+    If scorecard is provided, analysis is restricted to the model's
+    variable list (intersection with data columns).
     """
     feature_cols = config.get_feature_columns(list(data.columns))
+
+    # If scorecard available, restrict to model variables only
+    if scorecard is not None:
+        model_vars = scorecard.get_var_names()
+        if model_vars:
+            feature_cols = [v for v in feature_cols if v in model_vars]
 
     # 2.1 Variable overview
     overview = _build_variable_overview(data, feature_cols, config, metadata)

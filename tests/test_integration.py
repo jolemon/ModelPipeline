@@ -9,6 +9,13 @@ class TestIntegration:
     """End-to-end test using real test.csv data and mock scorecard."""
 
     def test_full_report_generation(self, sample_df, mock_scorecard):
+        # Set var_names to match actual test.csv feature columns
+        mock_scorecard.get_var_names.return_value = [
+            "txriskscorev7", "rat1_sum_bu_1_14_pboc_aj65_cur",
+            "cu_ln_acct_lurate_gt50_arto", "r24m_cfcbnkndpst_noacct_ln_tac",
+            "sum_bu_1_01_pboc_aa1_m12m", "agaa_zbvg_xavm_bbvf_mf",
+            "r12p24m_njslap_qtcnt",
+        ]
         config = ReportConfig(
             partition_col="part_id",
             cust_col="appid",
@@ -41,6 +48,12 @@ class TestIntegration:
 
     def test_report_with_test_csv(self, sample_df, mock_scorecard):
         """Verify test.csv can be processed without errors."""
+        mock_scorecard.get_var_names.return_value = [
+            "txriskscorev7", "rat1_sum_bu_1_14_pboc_aj65_cur",
+            "cu_ln_acct_lurate_gt50_arto", "r24m_cfcbnkndpst_noacct_ln_tac",
+            "sum_bu_1_01_pboc_aa1_m12m", "agaa_zbvg_xavm_bbvf_mf",
+            "r12p24m_njslap_qtcnt",
+        ]
         config = ReportConfig(
             partition_col="part_id",
             cust_col="appid",

@@ -137,7 +137,7 @@ python3 -m model_report \
 # 基本用法 — 无评分卡
 python3 -m model_report -d test.csv
 
-# 带评分卡模型
+# 带评分卡模型 — 自动限定分析范围为入模变量
 python3 -m model_report -m model.pkl -d test.csv -o report_2025Q1.xlsx
 
 # 带变量元数据
@@ -287,6 +287,8 @@ class ReportConfig:
        ├─ .show_model_result() → 评分卡参数表（Estimate / Wald / VIF）
        └─ .score_card_result   → 评分卡分箱对照表
 ```
+
+> **注意**：当评分卡成功加载后，**变量分析范围自动限定为模型入模变量**（即 `get_var_names()` 返回的列表与数据列的交集）。无需手动配置 `exclude_columns`。
 
 ### 适配条件
 
