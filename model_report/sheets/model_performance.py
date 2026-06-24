@@ -19,8 +19,11 @@ def build_model_performance_sheet(
     are always computed.
     """
     detail = scorecard.get_model_summary() if scorecard is not None else None
+    print("    评分卡详情 ✓" if detail is not None and not detail.empty else "    评分卡详情 — 跳过")
     sample_effect = _build_sample_effect(data, config)
+    print("    建模样本集效果 ✓")
     backtest = _build_backtest_effect(data, config)
+    print("    回溯效果 ✓")
     bin_perf = _build_bin_performance(data, config)
 
     return {

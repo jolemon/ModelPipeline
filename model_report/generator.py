@@ -26,6 +26,24 @@ def _resolve_metadata_path(explicit_path: Optional[str] = None) -> Optional[str]
     return explicit_path  # May be None or non-existent (handled by loader)
 
 
+# ── Progress helpers ──
+
+def _print_header(msg: str):
+    print(f"\n{'='*60}\n  {msg}\n{'='*60}")
+
+
+def _log(msg: str):
+    print(f"  {msg}")
+
+
+def _step(i: int, total: int, desc: str):
+    print(f"\n  [{i}/{total}] {desc}...", end="", flush=True)
+
+
+def _ok():
+    print(" ✓")
+
+
 class ReportGenerator:
     """Orchestrates the three sheet builders and writes the Excel report."""
 
@@ -36,22 +54,43 @@ class ReportGenerator:
         self._metadata = {}
 
     def generate(self, data: pd.DataFrame, metadata_path=None) -> dict:
-        """Generate all report sheets as structured data.
-
-        Metadata file resolution:
-          1. Explicit metadata_path argument
-          2. Default: /srv/data_warehouse/特征映射表.xlsx (if exists)
-          3. Fallback: /srv/data_warehouse/特征映射表_新底座.xlsx (if exists)
-          4. None → metadata columns left empty
-        """
+        """Generate all report sheets as structured data."""
         self._validate_data(data)
+
+        _print_header("模型报告生成器 v0.3.0")
+        n = len(data)
+        train_n = (data[self.config.flag_col] == "train").sum()
+        oot_n = (data[self.config.flag_col] == "oot").sum()
+        _log(f"数据: {n:,} 样本 | train={train_n:,} oot={oot_n:,} | bad_rate={data[self.config.target_col].mean():.2%}")
+
         resolved = _resolve_metadata_path(metadata_path)
+        if resolved:
+            _log(f"元数据: {resolved}")
         self._metadata = load_variable_metadata(resolved)
 
+        # ── Sheet 1 ──
+        _step(1, 3, "模型设计 — 样本分区分布 + 建模分 + 效果汇总")
         sheet1 = build_model_design_sheet(data, self.config)
-        sheet2 = build_variable_analysis_sheet(data, self.scorecard, self.config, self._metadata)
-        sheet3 = build_model_performance_sheet(data, self.scorecard, self.config)
+        _log(f"  分区分布: {len(sheet1.get('样本分区分布', []))} 行")
+        _log(f"  建模分: {len(sheet1.get('样本建模分', []))} 行")
+        _ok()
 
+        # ── Sheet 2 ──
+        _step(2, 3, "变量分析 — 指标总览 + WOE 分箱")
+        sheet2 = build_variable_analysis_sheet(data, self.scorecard, self.config, self._metadata)
+        n_vars = len(sheet2.get("变量总览", []))
+        n_woe = len(sheet2.get("Top10 单变量 WOE 分箱分析", []))
+        _log(f"  变量数: {n_vars} | WOE 分箱: {n_woe} 个")
+        _ok()
+
+        # ── Sheet 3 ──
+        _step(3, 3, "模型表现 — 评分卡详情 + 效果 + 回溯 + 分箱")
+        sheet3 = build_model_performance_sheet(data, self.scorecard, self.config)
+        n_bin = len(sheet3.get("分箱表现", []))
+        _log(f"  分箱表现: {n_bin} 个分区")
+        _ok()
+
+        _print_header("报告生成完成")
         return {
             self.config.sheet1_name: sheet1,
             self.config.sheet2_name: sheet2,
@@ -62,7 +101,9 @@ class ReportGenerator:
                  metadata_path=None) -> None:
         """Generate report and write to Excel file."""
         sheets = self.generate(data, metadata_path)
+        _log(f"正在写入 Excel → {output_path}")
         self._writer.write(output_path, sheets)
+        _print_header(f"已保存: {output_path}")
 
     def _validate_data(self, data: pd.DataFrame) -> None:
         """Validate that required columns exist."""

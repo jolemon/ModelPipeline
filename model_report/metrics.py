@@ -204,7 +204,6 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
 
     rows = []
     months = sorted(tmp["loan_month"].unique())
-
     for m in months + ["all"]:
         if m == "all":
             m_data = tmp

@@ -37,21 +37,28 @@ def build_variable_analysis_sheet(
     filter_summary = _build_filter_summary(feature_cols)
 
     # 2.2 Variable overview (sorted by Wald-Chi2 if available, else IV)
+    n_feats = len(feature_cols)
     overview = _build_variable_overview(data, feature_cols, config, metadata)
+    print(f"    指标总览: {n_feats} 个变量", end="", flush=True)
 
     if wald_order:
         overview = _sort_by_order(overview, wald_order)
+    print(" ✓")
 
     # 2.3 Top N WOE tables
     top_n = config.top_n_vars
     top_vars = _get_top_vars(overview, top_n)
     top10 = []
     train_data = data[data[config.flag_col] == "train"]
-    for var in top_vars:
+    n_woe = len(top_vars)
+    for vi, var in enumerate(top_vars):
+        print(f"\r    WOE分箱: {vi+1}/{n_woe} {var}", end="", flush=True)
         if len(train_data) > 0:
             woe_df = compute_woe_table(train_data, var=var, target_col=config.target_col)
             if woe_df is not None and not woe_df.empty:
                 top10.append((var, _format_woe_table(woe_df)))
+    if n_woe > 0:
+        print(f"\r    WOE分箱: {n_woe}/{n_woe} ✓")
 
     return {
         "变量筛选": filter_summary,
