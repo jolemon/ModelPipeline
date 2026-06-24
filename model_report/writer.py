@@ -156,14 +156,25 @@ class ExcelWriter:
                 data_start = header_row + 1
                 data_end = header_row + len(df)
                 if data_end >= data_start:
-                    rule = DataBarRule(
-                        start_type="min",
-                        end_type="max",
-                        color="FF5B9BD5",
-                        showValue=True,
-                        minLength=5,
-                        maxLength=100,
-                    )
+                    # WOE: center bars at 0 (negative← →positive)
+                    if "woe" in col_lower:
+                        rule = DataBarRule(
+                            start_type="num", start_value=0,
+                            end_type="max",
+                            color="FF5B9BD5",
+                            showValue=True,
+                            minLength=5,
+                            maxLength=100,
+                        )
+                    else:
+                        rule = DataBarRule(
+                            start_type="min",
+                            end_type="max",
+                            color="FF5B9BD5",
+                            showValue=True,
+                            minLength=5,
+                            maxLength=100,
+                        )
                     ws.conditional_formatting.add(
                         f"{col_letter}{data_start}:{col_letter}{data_end}", rule
                     )

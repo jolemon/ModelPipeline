@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "model-report"
-version = "1.0.1"
+version = "1.0.2"
 description = "信贷风控LR模型报告生成器"
 requires-python = ">=3.9"
 license = {text = "MIT"}
