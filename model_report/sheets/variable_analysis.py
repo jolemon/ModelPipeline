@@ -33,7 +33,10 @@ def build_variable_analysis_sheet(
                 .sort_values("Wald-Chi2", ascending=False)
             wald_order = wald_rank["Parameter"].tolist()
 
-    # 2.1 Variable overview (sorted by Wald-Chi2 if available, else IV)
+    # 2.1 Variable filter summary (top of sheet, threshold reference)
+    filter_summary = _build_filter_summary(feature_cols)
+
+    # 2.2 Variable overview (sorted by Wald-Chi2 if available, else IV)
     overview = _build_variable_overview(data, feature_cols, config, metadata)
 
     if wald_order:
@@ -51,6 +54,7 @@ def build_variable_analysis_sheet(
                 top10.append((var, _format_woe_table(woe_df)))
 
     return {
+        "变量筛选": filter_summary,
         "变量总览": overview,
         "Top10 单变量 WOE 分箱分析": top10,
     }
@@ -70,6 +74,25 @@ def _get_top_vars(overview: pd.DataFrame, top_n: int) -> list:
     if len(overview) == 0:
         return []
     return overview.head(top_n)["变量名"].tolist()
+
+
+def _build_filter_summary(feature_cols):
+    """Build variable filter summary table (threshold reference, top of Sheet 2)."""
+    if len(feature_cols) == 0:
+        return None
+
+    rows = [
+        {"筛选阶段": "粗筛", "指标": "PSI", "阈值": "<0.10"},
+        {"筛选阶段": "粗筛", "指标": "缺失率", "阈值": "<0.30"},
+        {"筛选阶段": "粗筛", "指标": "IV", "阈值": ">0.10"},
+        {"筛选阶段": "粗筛", "指标": "与目标相关性", "阈值": "训练/验证前后一致"},
+        {"筛选阶段": "粗筛", "指标": "业务解释", "阈值": "WOE单调性与目标符合逻辑"},
+        {"筛选阶段": "逐步回归", "指标": "变量相关性", "阈值": "<0.3"},
+        {"筛选阶段": "逐步回归", "指标": "VIF", "阈值": "<4"},
+        {"筛选阶段": "逐步回归", "指标": "P-value", "阈值": "<0.01"},
+    ]
+
+    return pd.DataFrame(rows)
 
 
 def _build_variable_overview(
