@@ -252,9 +252,15 @@ def _build_bin_performance(df: pd.DataFrame, config: ReportConfig) -> list:
         if len(subset) < n_bins * 2:
             continue
         try:
-            labels = pd.cut(subset[sc_score_col], bins=n_bins, precision=0, include_lowest=True)
-            result = calc_bin_metrics(subset[target_col], subset[sc_score_col],
-                                      pd.Series(labels.cat.categories))
+            labels, edges = pd.qcut(subset[sc_score_col], q=n_bins,
+                                     duplicates="drop", retbins=True)
+            edges[0] = -float("inf")
+            edges[-1] = float("inf")
+            intervals = pd.Series([
+                pd.Interval(edges[i], edges[i+1], closed="right")
+                for i in range(len(edges) - 1)
+            ])
+            result = calc_bin_metrics(subset[target_col], subset[sc_score_col], intervals)
             results.append((flag_labels.get(flag, flag), result))
         except Exception:
             continue
@@ -269,9 +275,15 @@ def _build_bin_performance(df: pd.DataFrame, config: ReportConfig) -> list:
         if len(subset) < n_bins * 2:
             continue
         try:
-            labels = pd.cut(subset[sc_score_col], bins=n_bins, precision=0, include_lowest=True)
-            result = calc_bin_metrics(subset[target_col], subset[sc_score_col],
-                                      pd.Series(labels.cat.categories))
+            labels, edges = pd.qcut(subset[sc_score_col], q=n_bins,
+                                     duplicates="drop", retbins=True)
+            edges[0] = -float("inf")
+            edges[-1] = float("inf")
+            intervals = pd.Series([
+                pd.Interval(edges[i], edges[i+1], closed="right")
+                for i in range(len(edges) - 1)
+            ])
+            result = calc_bin_metrics(subset[target_col], subset[sc_score_col], intervals)
             results.append((month, result))
         except Exception:
             continue
