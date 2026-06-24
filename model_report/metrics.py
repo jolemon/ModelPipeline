@@ -408,20 +408,34 @@ def calculate_all_ks(df, y_col: str = "mob6_30",
 
 
 def compute_woe_table(df, var: str, target_col: str = "mob6_30",
-                      bins: int = 10, good: int = 0, bad: int = 1) -> "pd.DataFrame":
-    """Compute WOE/IV/KS/Lift table for a variable from data using equal-frequency binning.
+                      good: int = 0, bad: int = 1,
+                      min_samples_pct: float = 0.03,
+                      max_samples_pct: float = 0.5) -> "pd.DataFrame":
+    """Compute WOE/IV/KS/Lift table with monotonic binning and missing value handling.
+
+    Adapted from model_library/dataset_learn.py monotonic_binning.
+
+    Algorithm:
+        1. Separate special-missing values (NaN, <= -99999) into a MISSING_VALUE bin
+        2. Fine equal-frequency binning (20 bins via percentiles)
+        3. Merge micro-bins to satisfy [min_samples_pct, max_samples_pct] proportion
+        4. Enforce WOE monotonicity (increase) by merging adjacent bins
+        5. Prepend MISSING_VALUE bin (if any missing samples)
+        6. Append ALL summary row
 
     Args:
         df: DataFrame with feature and target columns.
         var: Feature column name.
         target_col: Target column name (0=good, 1=bad).
-        bins: Number of equal-frequency bins for numeric variables.
         good: Value representing good in target.
         bad: Value representing bad in target.
+        min_samples_pct: Minimum samples per bin as fraction of total (default 3%).
+        max_samples_pct: Maximum samples per bin as fraction of total (default 50%).
 
     Returns:
         DataFrame with columns: min, max, goods, bads, total,
         good_prop, bad_prop, bad_rate, woe, iv, ks, lift.
+        Returns empty DataFrame if good or bad count is 0.
     """
     import pandas as pd
 
@@ -434,75 +448,280 @@ def compute_woe_table(df, var: str, target_col: str = "mob6_30",
         return pd.DataFrame()
 
     overall_bad_rate = total_bad / total_n
-
-    # Determine binning method
     is_numeric = np.issubdtype(sub[var].dtype, np.number)
 
-    if is_numeric:
-        try:
-            sub["_bin"], bin_edges = pd.qcut(sub[var], q=bins, duplicates="drop", retbins=True)
-        except Exception:
-            bin_edges = pd.cut(sub[var], bins=bins, retbins=True, duplicates="drop")[1]
-            sub["_bin"] = pd.cut(sub[var], bins=bin_edges, include_lowest=True)
-    else:
-        # Categorical: each unique value is a bin
-        sub["_bin"] = sub[var].astype(str)
+    # ── Categorical: each unique value is a bin (no merging needed) ──
+    if not is_numeric:
+        return _categorical_woe_table(sub, var, target_col, total_n,
+                                       total_good, total_bad, overall_bad_rate,
+                                       good, bad)
 
+    # ── Numeric: monotonic binning ──
+    return _numeric_monotonic_woe_table(sub, var, target_col, total_n,
+                                         total_good, total_bad, overall_bad_rate,
+                                         good, bad, min_samples_pct, max_samples_pct)
+
+
+def _categorical_woe_table(sub, var, target_col, total_n, total_good, total_bad,
+                            overall_bad_rate, good, bad):
+    """WOE table for categorical variable: one bin per unique value."""
+    import pandas as pd
+
+    sub["_bin"] = sub[var].astype(str)
     rows = []
-    bin_groups = sub.groupby("_bin", observed=False)
-
-    for bin_val, group in bin_groups:
+    for bin_val, group in sub.groupby("_bin", observed=False):
         g = int((group[target_col] == good).sum())
         b = int((group[target_col] == bad).sum())
         t = len(group)
-
         if t == 0:
             continue
-
-        good_prop = g / total_good
-        bad_prop = b / total_bad
-        bad_rate = b / t
-
-        eps = 1e-10
-        good_prop_safe = max(good_prop, eps)
-        bad_prop_safe = max(bad_prop, eps)
-
-        woe = np.log(bad_prop_safe / good_prop_safe)
-        iv_bin = (bad_prop - good_prop) * woe
-        ks_bin = abs(bad_prop - good_prop)
-        lift = bad_rate / overall_bad_rate if overall_bad_rate > 0 else 0
-
-        # Extract bin boundaries
-        if is_numeric and isinstance(bin_val, pd.Interval):
-            mn = bin_val.left
-            mx = bin_val.right
-        elif is_numeric:
-            mn = mx = bin_val
-        else:
-            mn = mx = str(bin_val)
-
-        rows.append({
-            "min": mn,
-            "max": mx,
-            "goods": g,
-            "bads": b,
-            "total": t,
-            "good_prop": good_prop,
-            "bad_prop": bad_prop,
-            "bad_rate": round(bad_rate, 4),
-            "woe": round(woe, 4),
-            "iv": round(iv_bin, 4),
-            "ks": round(ks_bin, 4),
-            "lift": round(lift, 4),
-        })
+        rows.append(_make_bin_row(bin_val, bin_val, g, b, t,
+                                   total_good, total_bad, overall_bad_rate))
 
     result = pd.DataFrame(rows)
+    result = result.sort_values("bad_rate", ascending=False)
+    return _append_all_row(result, total_good, total_bad, total_n, overall_bad_rate)
 
-    # Sort by min for numeric, by bad_rate descending for categorical
-    if is_numeric and len(result) > 0:
-        result = result.sort_values("min")
 
-    # Add ALL row
+def _numeric_monotonic_woe_table(sub, var, target_col, total_n, total_good,
+                                  total_bad, overall_bad_rate, good, bad,
+                                  min_samples_pct, max_samples_pct):
+    """Monotonic binning for numeric variable."""
+    import pandas as pd
+
+    # ── 1. Separate missing / special values ──
+    missing_values = [v for v in [float("-inf"), float("inf")] if False]  # placeholder
+    special_mask = sub[var].isna() | (pd.to_numeric(sub[var], errors="coerce") <= -99999)
+    # Cast to float after handling non-numeric
+    numeric_var = pd.to_numeric(sub[var], errors="coerce")
+    special_mask = numeric_var.isna() | (numeric_var <= -99999)
+
+    valid_mask = ~special_mask
+    valid_data = numeric_var[valid_mask]
+    valid_target = sub.loc[valid_mask, target_col]
+
+    if len(valid_data) == 0:
+        return pd.DataFrame()
+
+    # ── 2. Initial fine binning via percentiles ──
+    n_init = 20
+    if len(valid_data) < n_init * 10:
+        n_init = max(5, len(valid_data) // 10)
+    percentiles = np.linspace(0, 100, n_init + 1)[1:-1]
+    init_bins = np.percentile(valid_data, percentiles)
+    init_bins = np.unique(init_bins)
+    bin_edges = np.concatenate(([-np.inf], init_bins, [np.inf]))
+    bin_idx = np.digitize(valid_data, bin_edges) - 1
+
+    micro_stats = []
+    for i in range(len(bin_edges) - 1):
+        mask = (bin_idx == i)
+        if mask.sum() == 0:
+            continue
+        g = int((valid_target[mask] == good).sum())
+        b = int((valid_target[mask] == bad).sum())
+        t = int(mask.sum())
+        micro_stats.append({
+            "min": bin_edges[i], "max": bin_edges[i + 1],
+            "goods": g, "bads": b, "total": t,
+        })
+
+    if not micro_stats:
+        return pd.DataFrame()
+
+    micro_df = pd.DataFrame(micro_stats)
+    micro_df["total_pct"] = micro_df["total"] / total_n
+
+    # ── 3. Merge micro-bins to satisfy proportion constraints ──
+    final_bins = []
+    current = {"min": None, "max": None, "goods": 0, "bads": 0, "total": 0}
+    for _, row in micro_df.iterrows():
+        if current["min"] is None:
+            current["min"] = row["min"]
+        current["max"] = row["max"]
+        current["goods"] += row["goods"]
+        current["bads"] += row["bads"]
+        current["total"] += row["total"]
+        cur_pct = current["total"] / total_n
+
+        if cur_pct > max_samples_pct:
+            if current["total"] == row["total"]:
+                final_bins.append(current.copy())
+                current = {"min": None, "max": None, "goods": 0, "bads": 0, "total": 0}
+            else:
+                current["goods"] -= row["goods"]
+                current["bads"] -= row["bads"]
+                current["total"] -= row["total"]
+                final_bins.append(current.copy())
+                current = {"min": row["min"], "max": row["max"],
+                           "goods": row["goods"], "bads": row["bads"],
+                           "total": row["total"]}
+        elif cur_pct >= min_samples_pct:
+            final_bins.append(current.copy())
+            current = {"min": None, "max": None, "goods": 0, "bads": 0, "total": 0}
+
+    if current["total"] > 0:
+        if current["total"] / total_n < min_samples_pct and len(final_bins) > 0:
+            final_bins[-1]["max"] = current["max"]
+            final_bins[-1]["goods"] += current["goods"]
+            final_bins[-1]["bads"] += current["bads"]
+            final_bins[-1]["total"] += current["total"]
+        else:
+            final_bins.append(current)
+
+    if len(final_bins) < 2:
+        return _fallback_qcut_woe(sub, var, target_col, total_n, total_good,
+                                   total_bad, overall_bad_rate, good, bad)
+
+    # ── 4. Compute metrics ──
+    def compute_metrics(bin_list):
+        rows = []
+        for b in bin_list:
+            rows.append(_make_bin_row(b["min"], b["max"], b["goods"], b["bads"],
+                                       b["total"], total_good, total_bad,
+                                       overall_bad_rate))
+        return pd.DataFrame(rows)
+
+    df_valid = compute_metrics(final_bins)
+
+    # ── 5. Enforce WOE monotonicity (increase) ──
+    for _ in range(10):
+        woe_vals = df_valid["woe"].values
+        if _is_monotonic_increase(woe_vals):
+            break
+        # Find first pair that breaks monotonicity
+        merge_idx = -1
+        for i in range(len(woe_vals) - 1):
+            if woe_vals[i] > woe_vals[i + 1]:
+                merge_idx = i
+                break
+        if merge_idx == -1:
+            break
+        # Merge adjacent bins
+        merged = {
+            "min": df_valid.iloc[merge_idx]["min"],
+            "max": df_valid.iloc[merge_idx + 1]["max"],
+            "goods": int(df_valid.iloc[merge_idx]["goods"]) + int(df_valid.iloc[merge_idx + 1]["goods"]),
+            "bads": int(df_valid.iloc[merge_idx]["bads"]) + int(df_valid.iloc[merge_idx + 1]["bads"]),
+            "total": int(df_valid.iloc[merge_idx]["total"]) + int(df_valid.iloc[merge_idx + 1]["total"]),
+        }
+        df_valid = pd.concat([
+            df_valid.iloc[:merge_idx],
+            compute_metrics([merged]),
+            df_valid.iloc[merge_idx + 2:],
+        ], ignore_index=True)
+        if len(df_valid) < 2:
+            break
+
+    # ── 5b. Merge to target bin count, re-enforce monotonicity each step ──
+    target_max = 6
+    for _ in range(20):  # safety limit
+        if len(df_valid) <= target_max:
+            break
+        # Merge the adjacent pair with smallest absolute WOE gap
+        woe_vals = df_valid["woe"].values
+        best_idx = 0
+        best_gap = abs(woe_vals[0] - woe_vals[1])
+        for i in range(1, len(woe_vals) - 1):
+            gap = abs(woe_vals[i] - woe_vals[i + 1])
+            if gap < best_gap:
+                best_gap = gap
+                best_idx = i
+        merged = {
+            "min": df_valid.iloc[best_idx]["min"],
+            "max": df_valid.iloc[best_idx + 1]["max"],
+            "goods": int(df_valid.iloc[best_idx]["goods"]) + int(df_valid.iloc[best_idx + 1]["goods"]),
+            "bads": int(df_valid.iloc[best_idx]["bads"]) + int(df_valid.iloc[best_idx + 1]["bads"]),
+            "total": int(df_valid.iloc[best_idx]["total"]) + int(df_valid.iloc[best_idx + 1]["total"]),
+        }
+        df_valid = pd.concat([
+            df_valid.iloc[:best_idx],
+            compute_metrics([merged]),
+            df_valid.iloc[best_idx + 2:],
+        ], ignore_index=True)
+        # Re-enforce monotonicity after merge
+        woe_vals2 = df_valid["woe"].values
+        if not _is_monotonic_increase(woe_vals2):
+            for j in range(len(woe_vals2) - 1):
+                if woe_vals2[j] > woe_vals2[j + 1]:
+                    merged2 = {
+                        "min": df_valid.iloc[j]["min"],
+                        "max": df_valid.iloc[j + 1]["max"],
+                        "goods": int(df_valid.iloc[j]["goods"]) + int(df_valid.iloc[j + 1]["goods"]),
+                        "bads": int(df_valid.iloc[j]["bads"]) + int(df_valid.iloc[j + 1]["bads"]),
+                        "total": int(df_valid.iloc[j]["total"]) + int(df_valid.iloc[j + 1]["total"]),
+                    }
+                    df_valid = pd.concat([
+                        df_valid.iloc[:j],
+                        compute_metrics([merged2]),
+                        df_valid.iloc[j + 2:],
+                    ], ignore_index=True)
+                    break
+
+    # ── 5c. Final monotonicity check (iterate until fixed) ──
+    for _ in range(10):
+        woe_final = df_valid["woe"].values
+        if _is_monotonic_increase(woe_final):
+            break
+        for k in range(len(woe_final) - 1):
+            if woe_final[k] > woe_final[k + 1]:
+                merged_final = {
+                    "min": df_valid.iloc[k]["min"],
+                    "max": df_valid.iloc[k + 1]["max"],
+                    "goods": int(df_valid.iloc[k]["goods"]) + int(df_valid.iloc[k + 1]["goods"]),
+                    "bads": int(df_valid.iloc[k]["bads"]) + int(df_valid.iloc[k + 1]["bads"]),
+                    "total": int(df_valid.iloc[k]["total"]) + int(df_valid.iloc[k + 1]["total"]),
+                }
+                df_valid = pd.concat([
+                    df_valid.iloc[:k],
+                    compute_metrics([merged_final]),
+                    df_valid.iloc[k + 2:],
+                ], ignore_index=True)
+                break
+
+    # ── 6. Missing bin ──
+    result = df_valid
+    if special_mask.any():
+        missing_goods = int((sub.loc[special_mask, target_col] == good).sum())
+        missing_bads = int((sub.loc[special_mask, target_col] == bad).sum())
+        missing_total = int(special_mask.sum())
+        if missing_total > 0:
+            missing_row = _make_bin_row("MISSING_VALUE", "MISSING_VALUE",
+                                         missing_goods, missing_bads, missing_total,
+                                         total_good, total_bad, overall_bad_rate)
+            result = pd.concat([pd.DataFrame([missing_row]), df_valid], ignore_index=True)
+
+    # ── 7. ALL row ──
+    return _append_all_row(result, total_good, total_bad, total_n, overall_bad_rate)
+
+
+def _make_bin_row(mn, mx, g, b, t, total_good, total_bad, overall_bad_rate) -> dict:
+    """Create a single bin row with all metrics."""
+    good_prop = g / total_good if total_good > 0 else 0
+    bad_prop = b / total_bad if total_bad > 0 else 0
+    bad_rate = b / t if t > 0 else 0
+    eps = 1e-10
+    woe = np.log(max(bad_prop, eps) / max(good_prop, eps))
+    iv = (bad_prop - good_prop) * woe
+    ks = abs(bad_prop - good_prop)
+    lift = bad_rate / overall_bad_rate if overall_bad_rate > 0 else 0
+    return {
+        "min": mn, "max": mx,
+        "goods": g, "bads": b, "total": t,
+        "good_prop": good_prop, "bad_prop": bad_prop,
+        "bad_rate": round(bad_rate, 4), "woe": round(woe, 4),
+        "iv": round(iv, 4), "ks": round(ks, 4), "lift": round(lift, 4),
+    }
+
+
+def _is_monotonic_increase(arr) -> bool:
+    """Check if values are monotonically non-decreasing."""
+    return all(arr[i] <= arr[i + 1] for i in range(len(arr) - 1))
+
+
+def _append_all_row(result, total_good, total_bad, total_n, overall_bad_rate):
+    """Append ALL summary row."""
+    import pandas as pd
     all_row = {
         "min": "ALL", "max": "ALL",
         "goods": total_good, "bads": total_bad, "total": total_n,
@@ -510,6 +729,28 @@ def compute_woe_table(df, var: str, target_col: str = "mob6_30",
         "woe": 0.0, "iv": result["iv"].sum() if len(result) > 0 else 0.0,
         "ks": 0.0, "lift": 1.0,
     }
-    result = pd.concat([result, pd.DataFrame([all_row])], ignore_index=True)
+    return pd.concat([result, pd.DataFrame([all_row])], ignore_index=True)
 
-    return result
+
+def _fallback_qcut_woe(sub, var, target_col, total_n, total_good, total_bad,
+                        overall_bad_rate, good, bad):
+    """Fallback: simple equal-frequency binning when monotonic merge fails."""
+    import pandas as pd
+    try:
+        sub["_bin"] = pd.qcut(pd.to_numeric(sub[var], errors="coerce"),
+                               q=5, duplicates="drop")
+    except Exception:
+        sub["_bin"] = pd.cut(pd.to_numeric(sub[var], errors="coerce"),
+                              bins=5, include_lowest=True, duplicates="drop")
+    rows = []
+    for bin_val, group in sub.groupby("_bin", observed=False):
+        g = int((group[target_col] == good).sum())
+        b = int((group[target_col] == bad).sum())
+        t = len(group)
+        if t == 0:
+            continue
+        mn = bin_val.left if hasattr(bin_val, "left") else str(bin_val)
+        mx = bin_val.right if hasattr(bin_val, "right") else str(bin_val)
+        rows.append(_make_bin_row(mn, mx, g, b, t, total_good, total_bad, overall_bad_rate))
+    result = pd.DataFrame(rows).sort_values("min")
+    return _append_all_row(result, total_good, total_bad, total_n, overall_bad_rate)

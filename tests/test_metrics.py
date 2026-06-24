@@ -5,6 +5,7 @@ from model_report.metrics import (
     calc_auc, calc_ks, calc_lift, calc_bin_metrics, calc_score_psi,
     calc_monthly_metrics, calc_var_psi, calc_var_iv, calc_var_ks,
     calc_missing_rate, calculate_all_ks, compute_woe_table,
+    _is_monotonic_increase,
 )
 
 
@@ -349,3 +350,63 @@ class TestComputeWoeTable:
         })
         result = compute_woe_table(df, var="cat", target_col="target")
         assert len(result) >= 2
+
+    def test_missing_value_bin(self):
+        """Special missing values should create a MISSING_VALUE bin."""
+        np.random.seed(42)
+        n = 200
+        x = np.random.normal(0, 1, n)
+        # Inject some special missing values
+        x[:10] = -999999.0
+        df = pd.DataFrame({
+            "target": np.random.choice([0, 1], n, p=[0.8, 0.2]),
+            "x": x,
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        assert "MISSING_VALUE" in result["min"].values
+
+    def test_woe_monotonic_increase(self):
+        """WOE should be non-decreasing across valid bins (excluding ALL)."""
+        np.random.seed(42)
+        n = 300
+        scores = np.concatenate([
+            np.random.normal(0, 1, 150),
+            np.random.normal(4, 1, 150),
+        ])
+        df = pd.DataFrame({"target": [0]*150 + [1]*150, "x": scores})
+        result = compute_woe_table(df, var="x", target_col="target")
+        # Exclude ALL and MISSING_VALUE rows
+        woe_vals = result.loc[
+            ~result["min"].isin(["ALL", "MISSING_VALUE"]), "woe"
+        ].values
+        assert _is_monotonic_increase(woe_vals)
+
+    def test_bin_count_range(self):
+        """Total bins should be 4-7 (valid bins + ALL, possibly missing)."""
+        np.random.seed(42)
+        n = 300
+        df = pd.DataFrame({
+            "target": np.random.choice([0, 1], n, p=[0.85, 0.15]),
+            "x": np.random.normal(10, 3, n),
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        # Exclude ALL row for valid bin count
+        valid = result[result["min"] != "ALL"]
+        assert 3 <= len(valid) <= 7, f"Expected 3-7 valid bins, got {len(valid)}"
+
+    def test_min_bin_proportion(self):
+        """Each bin should have >= 3% of total samples."""
+        np.random.seed(42)
+        n = 300
+        df = pd.DataFrame({
+            "target": np.random.choice([0, 1], n, p=[0.85, 0.15]),
+            "x": np.random.normal(10, 3, n),
+        })
+        result = compute_woe_table(df, var="x", target_col="target")
+        valid = result[result["min"] != "ALL"]
+        for _, row in valid.iterrows():
+            pct = row["total"] / n
+            # Allow MISSING_VALUE bin to be smaller
+            if row["min"] == "MISSING_VALUE":
+                continue
+            assert pct >= 0.025, f"Bin [{row['min']}, {row['max']}] has only {pct:.2%}"
