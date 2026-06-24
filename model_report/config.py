@@ -53,12 +53,28 @@ class ReportConfig:
         non_vars = set(self.get_non_variable_columns())
         return [c for c in df_columns if c not in non_vars]
 
-    def resolve_score_column(self, df_columns: list) -> str:
-        """Resolve the score column for metrics calculation.
+    # Common score column name candidates (checked when configured cols not found)
+    _SCORE_CANDIDATES = ["scorecard_score", "score", "pred_score", "prob"]
 
-        Uses sc_score_col (scorecard_score) as the primary metric score.
-        Falls back to score_col if sc_score_col is not present.
+    def resolve_score_column(self, df_columns: list) -> str:
+        """Resolve the best available score column for metrics calculation.
+
+        Checks sc_score_col first, then score_col, then common candidates.
         """
         if self.sc_score_col in df_columns:
             return self.sc_score_col
-        return self.score_col
+        if self.score_col in df_columns:
+            return self.score_col
+        for candidate in self._SCORE_CANDIDATES:
+            if candidate in df_columns:
+                return candidate
+        return self.sc_score_col  # Return default even if missing
+
+    def resolve_sc_score_column(self, df_columns: list) -> str:
+        """Resolve the scorecard score column (used for binning)."""
+        if self.sc_score_col in df_columns:
+            return self.sc_score_col
+        for candidate in self._SCORE_CANDIDATES:
+            if candidate in df_columns:
+                return candidate
+        return self.sc_score_col

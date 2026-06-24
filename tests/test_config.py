@@ -49,5 +49,12 @@ class TestReportConfig:
     def test_resolve_score_column_neither(self):
         cfg = ReportConfig()
         df_cols = ["part_id", "mob6_30"]
-        # neither sc_score_col nor score_col exists, returns score_col
-        assert cfg.resolve_score_column(df_cols) == "pred_score"
+        # neither configured nor candidate — returns sc_score_col default
+        assert cfg.resolve_score_column(df_cols) == "scorecard_score"
+
+    def test_resolve_score_column_fuzzy(self):
+        """Auto-detect score column from common names when config doesn't match."""
+        cfg = ReportConfig()
+        df_cols = ["part_id", "mob6_30", "score"]
+        # 'score' is in _SCORE_CANDIDATES
+        assert cfg.resolve_score_column(df_cols) == "score"

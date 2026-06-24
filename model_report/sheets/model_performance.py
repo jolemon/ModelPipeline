@@ -36,7 +36,7 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
     flag_col = config.flag_col
     target_col = config.target_col
     score_col = config.resolve_score_column(list(df.columns))
-    sc_score_col = config.sc_score_col
+    sc_score_col = config.resolve_sc_score_column(list(df.columns))
     flag_labels = config.flag_labels
 
     # Get train set score distribution for PSI reference
@@ -99,7 +99,7 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
     """Build monthly backtest effect table."""
     target_col = config.target_col
     score_col = config.resolve_score_column(list(df.columns))
-    sc_score_col = config.sc_score_col
+    sc_score_col = config.resolve_sc_score_column(list(df.columns))
     date_col = config.date_col
     flag_col = config.flag_col
 
@@ -217,7 +217,7 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
 
 def _build_bin_performance(df: pd.DataFrame, config: ReportConfig) -> list:
     """Build per-partition binning performance tables."""
-    sc_score_col = config.sc_score_col
+    sc_score_col = config.resolve_sc_score_column(list(df.columns))
     target_col = config.target_col
     flag_col = config.flag_col
     partition_col = config.partition_col

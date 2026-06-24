@@ -53,13 +53,21 @@ class ReportGenerator:
             self.config.partition_col,
             self.config.flag_col,
             self.config.target_col,
-            self.config.sc_score_col,
         ]
 
         missing = [col for col in required if col not in data.columns]
         if missing:
             raise ValueError(
                 f"Missing required columns in data: {missing}. "
+                f"Available columns: {list(data.columns)}"
+            )
+
+        # Warn if no score column found (not fatal)
+        score_col = self.config.resolve_score_column(list(data.columns))
+        if score_col not in data.columns:
+            raise ValueError(
+                f"No score column found. Tried '{self.config.sc_score_col}' "
+                f"and '{self.config.score_col}'. "
                 f"Available columns: {list(data.columns)}"
             )
 
