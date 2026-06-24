@@ -1,4 +1,5 @@
 import pytest
+import pandas as pd
 import tempfile
 from pathlib import Path
 from model_report.metadata import load_variable_metadata
@@ -26,3 +27,26 @@ class TestLoadVariableMetadata:
     def test_no_metadata_returns_empty_strings(self):
         result = load_variable_metadata(None)
         assert result == {}
+
+    def test_feature_warehouse_xlsx(self):
+        """Feature warehouse Excel with 字段名/字段含义/来源表 and auto-classification."""
+        import tempfile
+        df = pd.DataFrame({
+            "字段名": ["txriskscorev7", "l3m_cnsmcnt_sum"],
+            "字段含义": ["三方风险分", "近3个月总消费笔数"],
+            "来源表": ["edap.table_risk", "wdyy.t_ccrdyyf_cust_cnsm_info_stats"],
+        })
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:
+            df.to_excel(f.name, index=False)
+            tmp_path = f.name
+
+        try:
+            result = load_variable_metadata(tmp_path)
+            assert result["txriskscorev7"]["变量解释含义"] == "三方风险分"
+            assert result["txriskscorev7"]["来源"] == "edap.table_risk"
+            assert "外部数据" in result["txriskscorev7"]["表描述"]  # edap.* → 外部数据
+            assert result["l3m_cnsmcnt_sum"]["变量解释含义"] == "近3个月总消费笔数"
+            assert "行为变量" in result["l3m_cnsmcnt_sum"]["表描述"]  # wdyy.t_ccrdyyf → 行为变量
+            assert "字节" in result["l3m_cnsmcnt_sum"]["表描述"]      # platform
+        finally:
+            Path(tmp_path).unlink()
