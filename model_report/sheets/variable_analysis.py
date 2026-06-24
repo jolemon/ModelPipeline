@@ -41,8 +41,8 @@ def build_variable_analysis_sheet(
                 top10.append((var, _format_woe_table(woe_df)))
 
     return {
-        "ivar_ks_psi_overview": overview,
-        "top10_woe_bins": top10,
+        "变量总览": overview,
+        "Top10 单变量 WOE 分箱分析": top10,
     }
 
 
