@@ -17,6 +17,30 @@ class ExcelWriter:
     HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=True)
     DATA_ALIGNMENT = Alignment(horizontal="center", vertical="center")
 
+    # Column name → Excel number format (display only, no value rounding)
+    NUMBER_FORMATS = {
+        "woe": "0.00",
+        "iv": "0.00",
+        "ks": "0.00",
+        "lift": "0.00",
+        "cum_lift": "0.00",
+        "bad_rate": "0.0000",
+        "cum_bad_rate": "0.0000",
+        "cum_bads_prop": "0.0000",
+        "good_prop": "0.00%",
+        "bad_prop": "0.00%",
+        "psi": "0.0000",
+        "AUC": "0.00",
+        "KS": "0.00",
+        "Estimate": "0.0000",
+        "Std-Error": "0.0000",
+        "Wald-Chi2": "0.00",
+        "Std": "0.00",
+        "Std-Estimate": "0.0000",
+        "VIF": "0.00",
+        "P-value-num": "0.000000",
+    }
+
     def write(self, output_path: str, sheets: dict) -> None:
         """Write structured data to Excel.
 
@@ -68,12 +92,17 @@ class ExcelWriter:
             cell.alignment = self.HEADER_ALIGNMENT
         current_row += 1
 
-        # Data — base font, centered
+        # Data — base font, centered, with per-column number format
         for _, row in df.iterrows():
             for col_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=current_row, column=col_idx, value=value)
                 cell.font = self.BASE_FONT
                 cell.alignment = self.DATA_ALIGNMENT
+                # Apply number format if column matches
+                col_name = df.columns[col_idx - 1]
+                fmt = self.NUMBER_FORMATS.get(col_name)
+                if fmt:
+                    cell.number_format = fmt
             current_row += 1
 
         # Auto-fit column widths
