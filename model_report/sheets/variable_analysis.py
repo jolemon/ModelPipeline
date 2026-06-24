@@ -16,20 +16,31 @@ def build_variable_analysis_sheet(
 
     All metrics are computed directly from the scoring data.
     If scorecard is provided, analysis is restricted to the model's
-    variable list (intersection with data columns).
+    variable list and sorted by Wald-Chi2 descending.
     """
     feature_cols = config.get_feature_columns(list(data.columns))
 
-    # If scorecard available, restrict to model variables only
+    # If scorecard available, restrict to model variables + sort by Wald-Chi2
+    wald_order = None
     if scorecard is not None:
         model_vars = scorecard.get_var_names()
         if model_vars:
             feature_cols = [v for v in feature_cols if v in model_vars]
+        # Build Wald-Chi2 ranking from model summary
+        summary = scorecard.get_model_summary()
+        if not summary.empty and "Parameter" in summary.columns and "Wald-Chi2" in summary.columns:
+            wald_rank = summary[summary["Parameter"] != "intercept"] \
+                .sort_values("Wald-Chi2", ascending=False)
+            wald_order = wald_rank["Parameter"].tolist()
 
-    # 2.1 Variable overview
+    # 2.1 Variable overview (sorted by Wald-Chi2 if available, else IV)
     overview = _build_variable_overview(data, feature_cols, config, metadata)
 
-    # 2.2 Top N WOE tables — computed from data, not scorecard
+    # Apply Wald-Chi2 sort if available
+    if wald_order:
+        overview = _sort_by_order(overview, wald_order)
+
+    # 2.2 Top N WOE tables
     top_n = config.top_n_vars
     top_vars = _get_top_vars(overview, top_n)
     top10 = []
@@ -44,6 +55,15 @@ def build_variable_analysis_sheet(
         "变量总览": overview,
         "Top10 单变量 WOE 分箱分析": top10,
     }
+
+
+def _sort_by_order(df: pd.DataFrame, order: list) -> pd.DataFrame:
+    """Sort DataFrame so that 变量名 column matches the given order list."""
+    order_map = {v: i for i, v in enumerate(order)}
+    df["_sort_key"] = df["变量名"].map(lambda x: order_map.get(x, 9999))
+    df = df.sort_values("_sort_key").drop(columns=["_sort_key"])
+    df["序号"] = range(1, len(df) + 1)
+    return df
 
 
 def _get_top_vars(overview: pd.DataFrame, top_n: int) -> list:

@@ -11,6 +11,7 @@ class TestBuildModelDesignSheet:
         result = build_model_design_sheet(small_df, config)
         assert "样本分区分布" in result
         assert "样本建模分" in result
+        assert "模型效果汇总" in result
 
     def test_partition_distribution_columns(self, small_df):
         config = ReportConfig()

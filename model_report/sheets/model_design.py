@@ -1,25 +1,61 @@
 import pandas as pd
+import numpy as np
 from model_report.config import ReportConfig
-from model_report.metrics import to_month
+from model_report.metrics import to_month, calc_auc, calc_ks
 
 
 def build_model_design_sheet(data: pd.DataFrame, config: ReportConfig) -> dict:
     """Build Sheet 1: Model Design.
 
     Produces:
-        partition_distribution — breakdown by data_flag × partition
-        modeling_score — train/test/oot summary
+        样本分区分布 — breakdown by loan_month × dominant flag
+        样本建模分 — train/test/oot/oos summary
+        模型效果汇总 — KS/AUC per sample set (from Sheet 3)
     """
+    score_col = config.resolve_score_column(list(data.columns))
+
     # 1.1 Partition distribution
     part_dist = _build_partition_distribution(data, config)
 
     # 1.2 Modeling score summary
     score_summary = _build_modeling_score(data, config)
 
+    # 1.3 Model effect summary (KS/AUC only)
+    effect_summary = _build_effect_summary(data, config, score_col)
+
     return {
         "样本分区分布": part_dist,
         "样本建模分": score_summary,
+        "模型效果汇总": effect_summary,
     }
+
+
+def _build_effect_summary(df: pd.DataFrame, config: ReportConfig,
+                           score_col: str) -> pd.DataFrame:
+    """Build simplified model effect summary (样本集, KS, AUC)."""
+    flag_col = config.flag_col
+    target_col = config.target_col
+    flag_labels = config.flag_labels
+
+    rows = []
+    for flag in ["train", "test", "oot", "oos"]:
+        subset = df[df[flag_col] == flag]
+        if len(subset) == 0:
+            continue
+        try:
+            auc = calc_auc(subset[target_col], subset[score_col])
+            ks = calc_ks(subset[target_col], subset[score_col])
+        except ValueError:
+            auc = float("nan")
+            ks = float("nan")
+
+        rows.append({
+            "样本集": flag_labels.get(flag, flag),
+            "KS": round(ks, 2) if not np.isnan(ks) else "",
+            "AUC": round(auc, 2) if not np.isnan(auc) else "",
+        })
+
+    return pd.DataFrame(rows)
 
 
 def _build_partition_distribution(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame:
@@ -90,14 +126,16 @@ def _build_partition_distribution(df: pd.DataFrame, config: ReportConfig) -> pd.
 
 
 def _build_modeling_score(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame:
-    """Build modeling score summary (train/test/oot/total)."""
+    """Build modeling score summary (train/test/oot/oos/total)."""
     flag_col = config.flag_col
     target_col = config.target_col
     flag_labels = config.flag_labels
 
     rows = []
-    for flag in ["train", "test", "oot"]:
+    for flag in ["train", "test", "oot", "oos"]:
         subset = df[df[flag_col] == flag]
+        if len(subset) == 0:
+            continue
         bad = int(subset[target_col].sum())
         total = len(subset)
         good = total - bad

@@ -124,6 +124,7 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
     score_col = config.resolve_score_column(list(df.columns))
     sc_score_col = config.resolve_sc_score_column(list(df.columns))
     loan_col = config.loan_amount_col
+    has_amount_backtest = bool(loan_col) and loan_col in df.columns
     date_col = config.date_col
     flag_col = config.flag_col
 
@@ -189,7 +190,7 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             psi_v = calc_score_psi(recent_month_data[sc_score_col], month_data[sc_score_col])
             recent_psi = f"{psi_v:.4f}"
 
-        rows.append({
+        row_dict = {
             "全量样本回溯": partition_label,
             "观察点月": month,
             "样本标签": config.target_label,
@@ -199,15 +200,17 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             "坏占比": f"{row['坏样本率']:.2%}",
             "KS": round(ks_val, 2) if not isinstance(ks_val, float) or not np.isnan(ks_val) else "",
             "AUC": round(auc_val, 2) if not isinstance(auc_val, float) or not np.isnan(auc_val) else "",
-            "金额KS": row.get("金额KS", ""),
-            "金额AUC": row.get("金额AUC", ""),
             "10%lift": lift_vals.get("10%", ""),
             "5%lift": lift_vals.get("5%", ""),
             "2%lift": lift_vals.get("2%", ""),
             "1%lift": lift_vals.get("1%", ""),
             "首月与各集合的PSI": first_psi,
             "最近月对比各集合PSI": recent_psi,
-        })
+        }
+        if has_amount_backtest:
+            row_dict["金额KS"] = row.get("金额KS", "")
+            row_dict["金额AUC"] = row.get("金额AUC", "")
+        rows.append(row_dict)
 
     # Total row
     total = len(df)
