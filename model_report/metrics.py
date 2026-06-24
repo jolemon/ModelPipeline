@@ -254,9 +254,9 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
             row["金额AUC"] = amt_auc if amt_auc != "" else ""
         rows.append(row)
         if m != "all":
-            print(f"\r    回溯效果 ({mi+1}/{n_months}): {m}", end="", flush=True)
+            print(f"\r    回溯效果 ({mi+1}/{n_months}): {m}   ", end="", flush=True)
 
-    print(f"\r    回溯效果: {n_months}/{n_months} ✓")
+    print(f"\r    回溯效果: {n_months}/{n_months} ✓" + " " * 20)
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
 
 

@@ -60,7 +60,7 @@ def build_variable_analysis_sheet(
                 label = f"{var}  —  {desc}" if desc else var
                 top10.append((label, _format_woe_table(woe_df)))
     if n_woe > 0:
-        print(f"\r    WOE分箱: {n_woe}/{n_woe} ✓")
+        print(f"\r    WOE分箱: {n_woe}/{n_woe} ✓" + " " * 40)
 
     return {
         "2.1 变量筛选": filter_summary,
