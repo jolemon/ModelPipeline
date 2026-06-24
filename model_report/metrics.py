@@ -204,7 +204,8 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
 
     rows = []
     months = sorted(tmp["loan_month"].unique())
-    for m in months + ["all"]:
+    n_months = len(months)
+    for mi, m in enumerate(months + ["all"]):
         if m == "all":
             m_data = tmp
         else:
@@ -252,7 +253,10 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
             row["金额KS"] = amt_ks if amt_ks != "" else ""
             row["金额AUC"] = amt_auc if amt_auc != "" else ""
         rows.append(row)
+        if m != "all":
+            print(f"\r    回溯效果 ({mi+1}/{n_months}): {m}", end="", flush=True)
 
+    print(f"\r    回溯效果: {n_months}/{n_months} ✓")
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
 
 
