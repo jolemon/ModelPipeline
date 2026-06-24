@@ -57,7 +57,7 @@ class ReportGenerator:
         """Generate all report sheets as structured data."""
         self._validate_data(data)
 
-        _print_header("模型报告生成器 v0.3.0")
+        _print_header("模型报告生成器 v1.0.0")
         n = len(data)
         train_n = (data[self.config.flag_col] == "train").sum()
         oot_n = (data[self.config.flag_col] == "oot").sum()
