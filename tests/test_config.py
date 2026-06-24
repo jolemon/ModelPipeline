@@ -58,3 +58,18 @@ class TestReportConfig:
         df_cols = ["part_id", "mob6_30", "score"]
         # 'score' is in _SCORE_CANDIDATES
         assert cfg.resolve_score_column(df_cols) == "score"
+
+    def test_exclude_columns(self):
+        cfg = ReportConfig(exclude_columns=["mob3_30", "mob2_15", "apl_chn"])
+        non_vars = cfg.get_non_variable_columns()
+        assert "mob3_30" in non_vars
+        assert "mob2_15" in non_vars
+        assert "apl_chn" in non_vars
+
+    def test_exclude_columns_in_get_features(self):
+        cfg = ReportConfig(exclude_columns=["mob3_30", "mob2_15"])
+        df_cols = ["part_id", "mob6_30", "mob3_30", "mob2_15", "feat_a", "feat_b"]
+        feats = cfg.get_feature_columns(df_cols)
+        assert "feat_a" in feats
+        assert "mob3_30" not in feats
+        assert "mob2_15" not in feats

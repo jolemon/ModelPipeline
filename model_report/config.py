@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -11,6 +11,9 @@ class ReportConfig:
     flag_col: str = "data_flag"
     score_col: str = "pred_score"
     sc_score_col: str = "scorecard_score"
+
+    # Extra columns to exclude from variable analysis
+    exclude_columns: list = field(default_factory=list)
 
     # Labels
     target_label: str = "Mob6 30+"
@@ -46,7 +49,7 @@ class ReportConfig:
             self.flag_col,
             self.score_col,
             self.sc_score_col,
-        ]
+        ] + list(self.exclude_columns)
 
     def get_feature_columns(self, df_columns: list) -> list:
         """Extract feature column names from DataFrame columns."""

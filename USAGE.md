@@ -247,6 +247,9 @@ class ReportConfig:
     score_col: str = "pred_score"        # 模型原始分列（0~1）
     sc_score_col: str = "scorecard_score" # 评分卡分数列
 
+    # ── 排除列 ──
+    exclude_columns: list = []            # 排除的列名列表（如其他 target、渠道、ID 等）
+
     # ── 显示标签 ──
     target_label: str = "Mob6 30+"       # 标签含义
     train_label: str = "训练集"           # train 显示名
