@@ -126,7 +126,7 @@ class TestReportGenerator:
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
         sheet3 = result[config.sheet3_name]
-        assert sheet3["scorecard_detail"] is None or sheet3["scorecard_detail"].empty
+        assert sheet3["评分卡详情"] is None or sheet3["评分卡详情"].empty
 
     def test_to_excel_without_scorecard(self, small_df):
         """Without scorecard, Excel should still be generated."""
