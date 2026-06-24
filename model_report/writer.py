@@ -62,6 +62,11 @@ class ExcelWriter:
                 if df is None:
                     continue
                 if isinstance(df, list):
+                    # Write wrapping section title first
+                    title_cell = ws.cell(row=current_row, column=1, value=section_name)
+                    title_cell.font = self.TITLE_FONT
+                    title_cell.alignment = Alignment(horizontal="left", vertical="center")
+                    current_row += 1
                     for label, sub_df in df:
                         if sub_df is None or (hasattr(sub_df, 'empty') and sub_df.empty):
                             continue
