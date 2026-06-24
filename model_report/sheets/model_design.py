@@ -17,8 +17,8 @@ def build_model_design_sheet(data: pd.DataFrame, config: ReportConfig) -> dict:
     score_summary = _build_modeling_score(data, config)
 
     return {
-        "partition_distribution": part_dist,
-        "modeling_score": score_summary,
+        "样本分区分布": part_dist,
+        "样本建模分": score_summary,
     }
 
 
