@@ -15,6 +15,7 @@ class ExcelWriter:
     HEADER_FONT = Font(name=FONT_FAMILY, size=FONT_SIZE, bold=True, color="FFFFFF")
     HEADER_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    DATA_ALIGNMENT = Alignment(horizontal="center", vertical="center")
 
     def write(self, output_path: str, sheets: dict) -> None:
         """Write structured data to Excel.
@@ -53,11 +54,13 @@ class ExcelWriter:
         """Write a single DataFrame section to the worksheet."""
         current_row = start_row
 
-        # Section title — bold
-        ws.cell(row=current_row, column=1, value=section_name).font = self.TITLE_FONT
+        # Section title — bold, centered
+        title_cell = ws.cell(row=current_row, column=1, value=section_name)
+        title_cell.font = self.TITLE_FONT
+        title_cell.alignment = Alignment(horizontal="left", vertical="center")
         current_row += 1
 
-        # Headers — white bold on blue
+        # Headers — white bold on blue, centered
         for col_idx, col_name in enumerate(df.columns, 1):
             cell = ws.cell(row=current_row, column=col_idx, value=str(col_name))
             cell.font = self.HEADER_FONT
@@ -65,11 +68,12 @@ class ExcelWriter:
             cell.alignment = self.HEADER_ALIGNMENT
         current_row += 1
 
-        # Data — base font
+        # Data — base font, centered
         for _, row in df.iterrows():
             for col_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=current_row, column=col_idx, value=value)
                 cell.font = self.BASE_FONT
+                cell.alignment = self.DATA_ALIGNMENT
             current_row += 1
 
         # Auto-fit column widths
@@ -84,16 +88,26 @@ class ExcelWriter:
         return current_row
 
     def _auto_fit_columns(self, ws, df, header_row: int) -> None:
-        """Set column widths based on content."""
+        """Set column widths based on content, accounting for CJK characters."""
         for col_idx, col_name in enumerate(df.columns, 1):
             col_letter = get_column_letter(col_idx)
-            content_lengths = [len(str(col_name))]
+            max_len = self._str_width(str(col_name))
             for row_idx in range(header_row + 1, header_row + 1 + len(df)):
                 cell_val = ws.cell(row=row_idx, column=col_idx).value
                 if cell_val is not None:
-                    content_lengths.append(len(str(cell_val)))
-            max_width = min(max(content_lengths) + 2, 40)
-            ws.column_dimensions[col_letter].width = max_width
+                    max_len = max(max_len, self._str_width(str(cell_val)))
+            ws.column_dimensions[col_letter].width = min(max_len + 3, 45)
+
+    @staticmethod
+    def _str_width(s: str) -> float:
+        """Approximate display width: CJK chars count as 2, ASCII as 1."""
+        w = 0.0
+        for ch in s:
+            if '一' <= ch <= '鿿' or '　' <= ch <= '〿' or '＀' <= ch <= '￯':
+                w += 2.0
+            else:
+                w += 1.0
+        return w
 
     def _apply_data_bars(self, ws, df, header_row: int) -> None:
         """Apply data bar conditional formatting to rate-like columns."""
