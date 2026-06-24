@@ -27,10 +27,10 @@ def build_model_performance_sheet(
     bin_perf = _build_bin_performance(data, config)
 
     return {
-        "评分卡详情": detail,
-        "建模样本集效果": sample_effect,
-        "回溯效果": backtest,
-        "分箱表现": bin_perf,
+        "3.1 评分卡详情": detail,
+        "3.2 建模样本集效果": sample_effect,
+        "3.3 回溯效果": backtest,
+        "3.4 分箱表现": bin_perf,
     }
 
 

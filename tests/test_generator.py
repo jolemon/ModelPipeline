@@ -94,7 +94,7 @@ class TestReportGenerator:
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
         sheet2 = result[config.sheet2_name]
-        assert len(sheet2["Top10 单变量 WOE 分箱分析"]) > 0
+        assert len(sheet2["2.3 单变量WOE分箱分析"]) > 0
 
     def test_without_scorecard_iv_train_computed(self, small_df):
         """Without scorecard, iv_train and ks_train are computed from data."""
@@ -108,7 +108,7 @@ class TestReportGenerator:
         )
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
-        overview = result[config.sheet2_name]["变量总览"]
+        overview = result[config.sheet2_name]["2.2 变量总览"]
         # iv/ks computed from data — should be non-empty numeric strings
         assert overview["iv_train"].iloc[0] != ""
         assert overview["ks_train"].iloc[0] != ""
@@ -126,7 +126,7 @@ class TestReportGenerator:
         gen = ReportGenerator(None, config)
         result = gen.generate(small_df)
         sheet3 = result[config.sheet3_name]
-        assert sheet3["评分卡详情"] is None or sheet3["评分卡详情"].empty
+        assert sheet3["3.1 评分卡详情"] is None or sheet3["3.1 评分卡详情"].empty
 
     def test_to_excel_without_scorecard(self, small_df):
         """Without scorecard, Excel should still be generated."""

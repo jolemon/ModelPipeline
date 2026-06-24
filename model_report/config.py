@@ -26,9 +26,9 @@ class ReportConfig:
     oos_label: str = "压测"
 
     # Sheet names
-    sheet1_name: str = "模型设计"
-    sheet2_name: str = "变量分析"
-    sheet3_name: str = "模型表现"
+    sheet1_name: str = "1.模型设计"
+    sheet2_name: str = "2.变量分析"
+    sheet3_name: str = "3.模型表现"
 
     # Thresholds
     top_n_vars: int = 10

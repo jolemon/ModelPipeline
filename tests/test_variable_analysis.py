@@ -15,8 +15,8 @@ class TestBuildVariableAnalysisSheet:
         )
         metadata = {"feat_a": {"变量解释含义": "test var a", "来源": "src_a", "表描述": "desc_a"}}
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, metadata)
-        assert "变量总览" in result
-        assert "Top10 单变量 WOE 分箱分析" in result
+        assert "2.2 变量总览" in result
+        assert "2.3 单变量WOE分箱分析" in result
 
     def test_overview_columns(self, small_df, mock_scorecard):
         config = ReportConfig(
@@ -26,7 +26,7 @@ class TestBuildVariableAnalysisSheet:
             sc_score_col="scorecard_score",
         )
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        df = result["变量总览"]
+        df = result["2.2 变量总览"]
         expected = ["序号", "变量名", "变量解释含义", "来源", "表描述", "数据类型"]
         for col in expected:
             assert col in df.columns
@@ -39,7 +39,7 @@ class TestBuildVariableAnalysisSheet:
             sc_score_col="scorecard_score",
         )
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        df = result["变量总览"]
+        df = result["2.2 变量总览"]
         assert "iv_train" in df.columns
         assert "iv_oot" in df.columns
 
@@ -52,7 +52,7 @@ class TestBuildVariableAnalysisSheet:
         )
         metadata = {"feat_a": {"变量解释含义": "test meaning", "来源": "test_source", "表描述": "test_desc"}}
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, metadata)
-        df = result["变量总览"]
+        df = result["2.2 变量总览"]
         row = df[df["变量名"] == "feat_a"].iloc[0]
         assert row["变量解释含义"] == "test meaning"
 
@@ -64,7 +64,7 @@ class TestBuildVariableAnalysisSheet:
             sc_score_col="scorecard_score",
         )
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        df = result["变量总览"]
+        df = result["2.2 变量总览"]
         row = df[df["变量名"] == "feat_a"].iloc[0]
         assert row["变量解释含义"] == ""
 
@@ -77,7 +77,7 @@ class TestBuildVariableAnalysisSheet:
             top_n_vars=3,
         )
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        top10 = result["Top10 单变量 WOE 分箱分析"]
+        top10 = result["2.3 单变量WOE分箱分析"]
         assert len(top10) <= 3
 
     def test_scorecard_restricts_variables(self, small_df, mock_scorecard):
@@ -92,7 +92,7 @@ class TestBuildVariableAnalysisSheet:
         )
         # small_df has feat_a, feat_b, feat_c
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        overview = result["变量总览"]
+        overview = result["2.2 变量总览"]
         var_names = overview["变量名"].tolist()
         assert var_names == ["feat_a"]
 
@@ -105,7 +105,7 @@ class TestBuildVariableAnalysisSheet:
             sc_score_col="scorecard_score",
         )
         result = build_variable_analysis_sheet(small_df, None, config, {})
-        overview = result["变量总览"]
+        overview = result["2.2 变量总览"]
         var_names = overview["变量名"].tolist()
         # small_df has feat_a, feat_b, feat_c → all should be present
         assert len(var_names) == 3

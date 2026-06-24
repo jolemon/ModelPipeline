@@ -56,14 +56,16 @@ def build_variable_analysis_sheet(
         if len(train_data) > 0:
             woe_df = compute_woe_table(train_data, var=var, target_col=config.target_col)
             if woe_df is not None and not woe_df.empty:
-                top10.append((var, _format_woe_table(woe_df)))
+                desc = metadata.get(var, {}).get("变量解释含义", "")
+                label = f"{var}  —  {desc}" if desc else var
+                top10.append((label, _format_woe_table(woe_df)))
     if n_woe > 0:
         print(f"\r    WOE分箱: {n_woe}/{n_woe} ✓")
 
     return {
-        "变量筛选": filter_summary,
-        "变量总览": overview,
-        "Top10 单变量 WOE 分箱分析": top10,
+        "2.1 变量筛选": filter_summary,
+        "2.2 变量总览": overview,
+        "2.3 单变量WOE分箱分析": top10,
     }
 
 
@@ -89,14 +91,14 @@ def _build_filter_summary(feature_cols):
         return None
 
     rows = [
-        {"筛选阶段": "粗筛", "指标": "PSI", "阈值": "<0.10"},
-        {"筛选阶段": "粗筛", "指标": "缺失率", "阈值": "<0.30"},
-        {"筛选阶段": "粗筛", "指标": "IV", "阈值": ">0.10"},
-        {"筛选阶段": "粗筛", "指标": "与目标相关性", "阈值": "训练/验证前后一致"},
-        {"筛选阶段": "粗筛", "指标": "业务解释", "阈值": "WOE单调性与目标符合逻辑"},
-        {"筛选阶段": "逐步回归", "指标": "变量相关性", "阈值": "<0.3"},
-        {"筛选阶段": "逐步回归", "指标": "VIF", "阈值": "<4"},
-        {"筛选阶段": "逐步回归", "指标": "P-value", "阈值": "<0.01"},
+        {"筛选阶段": "粗筛", "指标": "PSI", "阈值": "<0.10", "剩余变量数": 0},
+        {"筛选阶段": "粗筛", "指标": "缺失率", "阈值": "<0.30", "剩余变量数": 0},
+        {"筛选阶段": "粗筛", "指标": "IV", "阈值": ">0.10", "剩余变量数": 0},
+        {"筛选阶段": "粗筛", "指标": "与目标相关性", "阈值": "训练/验证前后一致", "剩余变量数": 0},
+        {"筛选阶段": "粗筛", "指标": "业务解释", "阈值": "WOE单调性与目标符合逻辑", "剩余变量数": 0},
+        {"筛选阶段": "逐步回归", "指标": "变量相关性", "阈值": "<0.3", "剩余变量数": 0},
+        {"筛选阶段": "逐步回归", "指标": "VIF", "阈值": "<4", "剩余变量数": 0},
+        {"筛选阶段": "逐步回归", "指标": "P-value", "阈值": "<0.01", "剩余变量数": 0},
     ]
 
     return pd.DataFrame(rows)

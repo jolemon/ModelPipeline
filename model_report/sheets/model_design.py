@@ -24,9 +24,9 @@ def build_model_design_sheet(data: pd.DataFrame, config: ReportConfig) -> dict:
     effect_summary = _build_effect_summary(data, config, score_col)
 
     return {
-        "样本分区分布": part_dist,
-        "样本建模分": score_summary,
-        "模型效果汇总": effect_summary,
+        "1.1 样本分区分布": part_dist,
+        "1.2 样本建模分": score_summary,
+        "1.3 模型效果汇总": effect_summary,
     }
 
 
