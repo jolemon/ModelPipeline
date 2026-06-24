@@ -154,6 +154,8 @@ class ExcelWriter:
                         end_type="max",
                         color="FF5B9BD5",
                         showValue=True,
+                        minLength=5,
+                        maxLength=100,
                     )
                     ws.conditional_formatting.add(
                         f"{col_letter}{data_start}:{col_letter}{data_end}", rule
