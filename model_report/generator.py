@@ -1,3 +1,5 @@
+import os
+from typing import Optional
 import pandas as pd
 from model_report.config import ReportConfig
 from model_report.metadata import load_variable_metadata
@@ -6,15 +8,26 @@ from model_report.sheets.model_design import build_model_design_sheet
 from model_report.sheets.variable_analysis import build_variable_analysis_sheet
 from model_report.sheets.model_performance import build_model_performance_sheet
 
+# Default feature warehouse paths (from model_library/config.py)
+_DEFAULT_WAREHOUSE_DIR = "/srv/data_warehouse"
+_DEFAULT_WAREHOUSE_FILES = [
+    os.path.join(_DEFAULT_WAREHOUSE_DIR, "特征映射表.xlsx"),
+    os.path.join(_DEFAULT_WAREHOUSE_DIR, "特征映射表_新底座.xlsx"),
+]
+
+
+def _resolve_metadata_path(explicit_path: Optional[str] = None) -> Optional[str]:
+    """Resolve metadata file path: explicit > default warehouse > None."""
+    if explicit_path and os.path.exists(explicit_path):
+        return explicit_path
+    for default_path in _DEFAULT_WAREHOUSE_FILES:
+        if os.path.exists(default_path):
+            return default_path
+    return explicit_path  # May be None or non-existent (handled by loader)
+
 
 class ReportGenerator:
-    """Orchestrates the three sheet builders and writes the Excel report.
-
-    Args:
-        scorecard: Optional scorecard object implementing ScorecardProtocol.
-                   If None, scorecard-dependent content is skipped.
-        config: Optional ReportConfig with column mappings and labels.
-    """
+    """Orchestrates the three sheet builders and writes the Excel report."""
 
     def __init__(self, scorecard=None, config=None):
         self.scorecard = scorecard
@@ -25,11 +38,15 @@ class ReportGenerator:
     def generate(self, data: pd.DataFrame, metadata_path=None) -> dict:
         """Generate all report sheets as structured data.
 
-        If no scorecard is provided, Sheet 2 skips IV/KS/WOE from scorecard
-        (still computes data-driven metrics) and Sheet 3 skips scorecard detail.
+        Metadata file resolution:
+          1. Explicit metadata_path argument
+          2. Default: /srv/data_warehouse/特征映射表.xlsx (if exists)
+          3. Fallback: /srv/data_warehouse/特征映射表_新底座.xlsx (if exists)
+          4. None → metadata columns left empty
         """
         self._validate_data(data)
-        self._metadata = load_variable_metadata(metadata_path)
+        resolved = _resolve_metadata_path(metadata_path)
+        self._metadata = load_variable_metadata(resolved)
 
         sheet1 = build_model_design_sheet(data, self.config)
         sheet2 = build_variable_analysis_sheet(data, self.scorecard, self.config, self._metadata)
