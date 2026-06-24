@@ -288,10 +288,12 @@ def calc_var_iv(df, var: str, target_col: str = "mob6_30") -> float:
     try:
         from toad import quality
         iv_result = quality(df[[var, target_col]], target_col, iv_only=True)
+        # toad.quality returns DataFrame with 'iv' column, vars as index
+        if isinstance(iv_result, pd.DataFrame) and "iv" in iv_result.columns:
+            return float(iv_result["iv"].iloc[0]) if len(iv_result) > 0 else 0.0
         if isinstance(iv_result, pd.Series):
-            val = iv_result.get(var, 0.0)
-            return float(val) if not np.isnan(float(val)) else 0.0
-        return float(iv_result) if iv_result else 0.0
+            return float(iv_result.iloc[0]) if len(iv_result) > 0 else 0.0
+        return 0.0
     except Exception:
         return 0.0
 
