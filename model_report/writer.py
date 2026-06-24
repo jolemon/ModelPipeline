@@ -156,7 +156,7 @@ class ExcelWriter:
                 data_start = header_row + 1
                 data_end = header_row + len(df)
                 if data_end >= data_start:
-                    # WOE: center bars at 0 (negative← →positive)
+                    # WOE: centered at 0, negative←(red) positive→(blue)
                     if "woe" in col_lower:
                         rule = DataBarRule(
                             start_type="num", start_value=0,
