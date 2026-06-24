@@ -106,7 +106,7 @@ Options:
   -m, --model PATH     Optional path to .pkl scorecard file.
   -d, --data PATH      Path to scoring result CSV file.  [required]
   -o, --output PATH    Output Excel path.
-  --metadata PATH      Optional variable metadata CSV/YAML.
+  --metadata PATH      Optional variable metadata or feature warehouse (.xlsx auto-classified).
   --help               Show this message and exit.
 ```
 
@@ -122,7 +122,7 @@ model-report -d test.csv -o test_report.xlsx
 pytest tests/ -v
 ```
 
-预期：85 passed。
+预期：95 passed。
 
 ---
 

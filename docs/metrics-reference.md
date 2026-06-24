@@ -66,13 +66,18 @@ $$
 
 ### 2.2 Top N 单变量 WOE 分箱表
 
-按 IV 降序取前 N 个变量（默认 10），每个变量在 **train** 集上做等频分箱后计算以下指标。
+按 IV 降序取前 N 个变量（默认 10），每个变量在 **train** 集上做单调分箱后计算。
 
-**分箱方法**：
-- 数值型变量：`pd.qcut(x, q=10)` 等频分 10 箱
-- 类别型变量：每个唯一值为一箱
+**分箱方法**（改编自 `model_library/dataset_learn.py` `monotonic_binning`）：
 
-以下指标对每个分箱分别计算，并附加 ALL 汇总行。
+1. **缺失分离**：NaN 和 ≤ -99999 → `MISSING_VALUE` 箱
+2. **初始细分箱**：有效值做 20 分位点等频分箱（`np.percentile`）
+3. **占比合并**：合并微箱至每箱占总数 3%~50%
+4. **WOE 单调增加**：找第一对断点合并，迭代至全单调
+5. **箱数缩减**：按 WOE 差距最小合并至 ≤6 箱，再检查单调性
+6. **缺失箱前置** + ALL 汇总行
+
+目标箱数 4-6 个（含 MISSING_VALUE 和 ALL）。类别型变量每唯一值一箱。
 
 #### 基础统计
 
@@ -170,21 +175,27 @@ $$
 
 #### AUC
 
-$$
-\text{AUC} = \frac{\sum_{i \in \text{bad}} \sum_{j \in \text{good}} \mathbb{1}[\text{score}_i > \text{score}_j]}{N_{\text{bad}} \times N_{\text{good}}}
-$$
+梯形法计算（与 `model_library/model_learn.py` `model_metrics_v4` 一致）：
 
-调用 `sklearn.metrics.roc_auc_score(y_true, y_score)`。
+1. 正类方向：`good_flag = 1 - target`（好=1, 坏=0）
+2. `roc_curve(good_flag, score, pos_label=1)` → FPR, TPR
+3. $\text{AUC} = \int \text{TPR} \, d(\text{FPR})$ 梯形积分
+
+调用 `sklearn.metrics.auc(fpr, tpr)`。
 
 #### KS
 
-$$
-KS = \max_{t} \left( \text{TPR}(t) - \text{FPR}(t) \right)
-$$
+与 AUC 相同正类方向：
 
-其中 $\text{TPR}(t) = \frac{\text{TP}(t)}{\text{TP}(t)+\text{FN}(t)}$，$\text{FPR}(t) = \frac{\text{FP}(t)}{\text{FP}(t)+\text{TN}(t)}$，$t$ 为决策阈值。
+1. `good_flag = 1 - target`
+2. `roc_curve(good_flag, score, pos_label=1)` → FPR, TPR
+3. $KS = \max |\text{TPR} - \text{FPR}|$
 
-调用 `sklearn.metrics.roc_curve` 后取 `max(tpr - fpr)`。
+#### 金额加权 AUC/KS
+
+当 `loan_amount_col` 配置后生效（与 `model_learn.calc_auc_ks_by_month` 一致）：
+
+调用 `roc_curve(good_flag, score, sample_weight=loan_amount)`，其余同。
 
 #### Lift (10% / 5% / 2% / 1%)
 
@@ -209,19 +220,23 @@ $$
 
 ### 3.3 全量回溯效果
 
-按 `part_id`（月度）逐月展开。每月的 AUC / KS / Lift 计算方式同 3.2。
+按 `loan_date` 派生月份（`to_month()` → yyyyMM）逐月展开。每月 AUC/KS/Lift 计算方式同 3.2。
+
+**金额加权 KS/AUC**：`calc_monthly_metrics` 接收 `loan_amount_col` 参数，同时输出 `金额KS` / `金额AUC`。
 
 **PSI（首月与各集合）**：以第一个月的评分分布为 Expected，各月为 Actual。
 
 **PSI（最近月对比各集合）**：以最近一个月的评分分布为 Expected，各月为 Actual。
 
-末行为 **总计** 行，汇总全部样本。
+**分区标签**：由月内多数 flag 决定（`value_counts().idxmax()`）。
+
+末行为 **总计**，汇总全部样本。
 
 ### 3.4 模型分箱表现
 
-对每个数据集（train / test / oot）和每个分区月，将 **评分卡分数** 等宽分 10 箱后计算。
+对每个数据集（train / test / oot）和每个分区月，将 **评分卡分数** 等频分 10 箱后计算。
 
-**分箱**：`pd.cut(score, bins=10, include_lowest=True)`
+**分箱**：`pd.qcut(score, q=10, duplicates="drop")`，边界扩展为 ±inf
 
 #### 基础统计
 
@@ -276,15 +291,15 @@ $$
 |------|------|------|------|
 | 变量 PSI（Sheet 2.1） | 等频 `pd.qcut` | 10 | train 分位点 ± inf |
 | 评分 PSI（Sheet 3.2/3.3） | 等频 `pd.qcut` | 10 | expected 分位点 ± inf |
-| WOE 分箱（Sheet 2.2） | 等频 `pd.qcut` | 10 | 自动 |
-| 分箱表现（Sheet 3.4） | 等宽 `pd.cut` | 10 | 自动 + `include_lowest=True` |
+| WOE 分箱（Sheet 2.2） | 等频 + 单调合并 | 4~6（自适应） | 20 分位点 → 合并 → ±inf |
+| 分箱表现（Sheet 3.4） | 等频 `pd.qcut` | 10 | 各集合分位点 ± inf |
 
 ## 附录 C：第三方库调用
 
 | 指标 | 库 | 函数 |
 |------|-----|------|
-| AUC | sklearn | `roc_auc_score` |
-| KS（模型） | sklearn | `roc_curve` |
+| AUC | sklearn | `auc()` 梯形法 |
+| KS（模型） | sklearn | `roc_curve` + `max(tpr-fpr)` |
 | KS（变量） | scipy | `stats.ks_2samp` |
 | IV（变量总览） | toad | `quality(iv_only=True)` |
-| 分箱 | pandas | `qcut` / `cut` |
+| 分箱 | pandas | `qcut` / `percentile` / `cut` |
