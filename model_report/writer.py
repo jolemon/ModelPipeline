@@ -3,11 +3,16 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.formatting.rule import DataBarRule
 from openpyxl.utils import get_column_letter
 
+FONT_FAMILY = "微软雅黑"
+FONT_SIZE = 11
+
 
 class ExcelWriter:
     """Writes structured DataFrames to formatted Excel sheets."""
 
-    HEADER_FONT_WHITE = Font(bold=True, size=11, color="FFFFFF")
+    BASE_FONT = Font(name=FONT_FAMILY, size=FONT_SIZE)
+    TITLE_FONT = Font(name=FONT_FAMILY, size=FONT_SIZE, bold=True)
+    HEADER_FONT = Font(name=FONT_FAMILY, size=FONT_SIZE, bold=True, color="FFFFFF")
     HEADER_FILL = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
@@ -19,7 +24,6 @@ class ExcelWriter:
             sheets: dict mapping sheet_name → dict[str, DataFrame].
         """
         wb = Workbook()
-        # Remove default sheet
         if "Sheet" in wb.sheetnames:
             del wb["Sheet"]
 
@@ -31,7 +35,6 @@ class ExcelWriter:
                 if df is None:
                     continue
                 if isinstance(df, list):
-                    # List of (label, DataFrame) tuples (e.g., top10 woe bins, bin performance)
                     for label, sub_df in df:
                         if sub_df is None or (hasattr(sub_df, 'empty') and sub_df.empty):
                             continue
@@ -41,7 +44,6 @@ class ExcelWriter:
                 else:
                     current_row = self._write_dataframe(ws, current_row, section_name, df)
 
-            # Remove default sheet if it still exists
             if "Sheet" in wb.sheetnames and len(wb.sheetnames) > 1:
                 del wb["Sheet"]
 
@@ -51,24 +53,23 @@ class ExcelWriter:
         """Write a single DataFrame section to the worksheet."""
         current_row = start_row
 
-        # Section title
-        ws.cell(row=current_row, column=1, value=section_name).font = Font(
-            bold=True, size=13
-        )
+        # Section title — bold
+        ws.cell(row=current_row, column=1, value=section_name).font = self.TITLE_FONT
         current_row += 1
 
-        # Headers
+        # Headers — white bold on blue
         for col_idx, col_name in enumerate(df.columns, 1):
             cell = ws.cell(row=current_row, column=col_idx, value=str(col_name))
-            cell.font = self.HEADER_FONT_WHITE
+            cell.font = self.HEADER_FONT
             cell.fill = self.HEADER_FILL
             cell.alignment = self.HEADER_ALIGNMENT
         current_row += 1
 
-        # Data
+        # Data — base font
         for _, row in df.iterrows():
             for col_idx, value in enumerate(row, 1):
-                ws.cell(row=current_row, column=col_idx, value=value)
+                cell = ws.cell(row=current_row, column=col_idx, value=value)
+                cell.font = self.BASE_FONT
             current_row += 1
 
         # Auto-fit column widths
