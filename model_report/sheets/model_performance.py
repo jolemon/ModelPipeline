@@ -30,7 +30,7 @@ def build_model_performance_sheet(
         "3.1 评分卡详情": detail,
         "3.2 建模样本集效果": sample_effect,
         "3.3 回溯效果": backtest,
-        "3.4 分箱表现": bin_perf,
+        "3.4 模型10分档表现": bin_perf,
     }
 
 

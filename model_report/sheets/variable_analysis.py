@@ -65,7 +65,7 @@ def build_variable_analysis_sheet(
     return {
         "2.1 变量筛选": filter_summary,
         "2.2 变量总览": overview,
-        "2.3 单变量WOE分箱分析": top10,
+        "2.3 单变量WOE分箱": top10,
     }
 
 

@@ -19,7 +19,7 @@ class TestBuildModelPerformanceSheet:
         assert "3.1 评分卡详情" in result
         assert "3.2 建模样本集效果" in result
         assert "3.3 回溯效果" in result
-        assert "3.4 分箱表现" in result
+        assert "3.4 模型10分档表现" in result
 
     def test_scorecard_detail_columns(self, small_df, mock_scorecard):
         config = ReportConfig(
@@ -75,5 +75,5 @@ class TestBuildModelPerformanceSheet:
             sc_score_col="scorecard_score",
         )
         result = build_model_performance_sheet(small_df, mock_scorecard, config)
-        bin_perf = result["3.4 分箱表现"]
+        bin_perf = result["3.4 模型10分档表现"]
         assert len(bin_perf) > 0

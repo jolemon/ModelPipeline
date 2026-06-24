@@ -16,7 +16,7 @@ class TestBuildVariableAnalysisSheet:
         metadata = {"feat_a": {"变量解释含义": "test var a", "来源": "src_a", "表描述": "desc_a"}}
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, metadata)
         assert "2.2 变量总览" in result
-        assert "2.3 单变量WOE分箱分析" in result
+        assert "2.3 单变量WOE分箱" in result
 
     def test_overview_columns(self, small_df, mock_scorecard):
         config = ReportConfig(
@@ -77,7 +77,7 @@ class TestBuildVariableAnalysisSheet:
             top_n_vars=3,
         )
         result = build_variable_analysis_sheet(small_df, mock_scorecard, config, {})
-        top10 = result["2.3 单变量WOE分箱分析"]
+        top10 = result["2.3 单变量WOE分箱"]
         assert len(top10) <= 3
 
     def test_scorecard_restricts_variables(self, small_df, mock_scorecard):
