@@ -129,39 +129,44 @@ def _assign_bins(y_score, bins) -> np.ndarray:
 
 
 def calc_score_psi(expected_scores, actual_scores, bins: int = 10) -> float:
-    """Calculate PSI between two score distributions using equal-width binning."""
+    """Calculate PSI between two score distributions using equal-frequency binning.
+
+    Bins are determined on the expected distribution, then the same boundaries
+    are applied to the actual distribution — consistent with calc_var_psi.
+    """
     import pandas as pd
 
     expected = np.array(expected_scores)
     actual = np.array(actual_scores)
 
-    min_val = min(expected.min(), actual.min())
-    max_val = max(expected.max(), actual.max())
-
-    if max_val <= min_val:
+    if len(expected) == 0 or len(actual) == 0:
         return 0.0
 
-    bin_edges = np.linspace(min_val, max_val, bins + 1)
-    bin_edges[0] = -np.inf
-    bin_edges[-1] = np.inf
+    try:
+        _, bin_edges = pd.qcut(expected, q=bins, duplicates="drop", retbins=True)
+        bin_edges = bin_edges.copy()
+        bin_edges[0] = -np.inf
+        bin_edges[-1] = np.inf
 
-    expected_binned = pd.cut(expected, bins=bin_edges, duplicates="drop")
-    actual_binned = pd.cut(actual, bins=bin_edges, duplicates="drop")
+        expected_binned = pd.cut(expected, bins=bin_edges)
+        actual_binned = pd.cut(actual, bins=bin_edges)
 
-    expected_counts = expected_binned.value_counts().sort_index()
-    actual_counts = actual_binned.value_counts().sort_index()
-    expected_dist = expected_counts / expected_counts.sum()
-    actual_dist = actual_counts / actual_counts.sum()
+        expected_counts = expected_binned.value_counts().sort_index()
+        actual_counts = actual_binned.value_counts().sort_index()
+        expected_dist = expected_counts / expected_counts.sum()
+        actual_dist = actual_counts / actual_counts.sum()
 
-    all_bins = expected_dist.index.union(actual_dist.index)
-    expected_aligned = expected_dist.reindex(all_bins, fill_value=1e-10)
-    actual_aligned = actual_dist.reindex(all_bins, fill_value=1e-10)
+        all_bins = expected_dist.index.union(actual_dist.index)
+        expected_aligned = expected_dist.reindex(all_bins, fill_value=1e-10)
+        actual_aligned = actual_dist.reindex(all_bins, fill_value=1e-10)
 
-    psi = np.sum(
-        (actual_aligned - expected_aligned) *
-        np.log(actual_aligned / expected_aligned)
-    )
-    return float(psi)
+        psi = np.sum(
+            (actual_aligned - expected_aligned) *
+            np.log(actual_aligned / expected_aligned)
+        )
+        return float(max(psi, 0.0))
+    except Exception:
+        return 0.0
 
 
 def calc_monthly_metrics(df, target_col: str = "mob6_30",

@@ -205,7 +205,7 @@ $$
 \text{PSI} = \sum_{i=1}^{10} \left( A_i - E_i \right) \times \ln\frac{A_i}{E_i}
 $$
 
-分箱方式：等宽 10 箱（`np.linspace(min, max, 11)`），两端扩展为 $[-\infty, +\infty]$。
+分箱方式：在 Expected（训练集）上做 **10 等频分箱**（`pd.qcut`），边界扩展为 $[-\infty, +\infty]$ 后对两方同时 `pd.cut`。与 `calc_var_psi` 保持一致。
 
 ### 3.3 全量回溯效果
 
@@ -275,7 +275,7 @@ $$
 | 场景 | 方法 | 箱数 | 边界 |
 |------|------|------|------|
 | 变量 PSI（Sheet 2.1） | 等频 `pd.qcut` | 10 | train 分位点 ± inf |
-| 评分 PSI（Sheet 3.2/3.3） | 等宽 `np.linspace` | 10 | 全局 min/max ± inf |
+| 评分 PSI（Sheet 3.2/3.3） | 等频 `pd.qcut` | 10 | expected 分位点 ± inf |
 | WOE 分箱（Sheet 2.2） | 等频 `pd.qcut` | 10 | 自动 |
 | 分箱表现（Sheet 3.4） | 等宽 `pd.cut` | 10 | 自动 + `include_lowest=True` |
 
