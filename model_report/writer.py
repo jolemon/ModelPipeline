@@ -19,6 +19,8 @@ class ExcelWriter:
 
     # Column name → Excel number format (display only, no value rounding)
     NUMBER_FORMATS = {
+        "min": "0",
+        "max": "0",
         "woe": "0.00",
         "iv": "0.00",
         "ks": "0.00",

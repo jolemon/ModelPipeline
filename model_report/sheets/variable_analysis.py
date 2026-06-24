@@ -128,12 +128,14 @@ def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
 
     out = woe_df.copy()
 
-    # Convert inf values in min/max to string representations
+    # Format min/max: inf/NaN as strings, numeric values to 2 decimal places
     for col in ["min", "max"]:
         if col in out.columns:
             out[col] = out[col].apply(
                 lambda x: "-inf" if (isinstance(x, float) and x == float("-inf")) or pd.isna(x)
-                else ("inf" if isinstance(x, float) and x == float("inf") else x)
+                else ("inf" if isinstance(x, float) and x == float("inf")
+                      else ("ALL" if x == "ALL"
+                            else f"{float(x):.2f}" if isinstance(x, (int, float)) else x))
             )
 
     # All metric columns kept numeric — Excel number format handles display
