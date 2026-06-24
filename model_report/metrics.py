@@ -489,11 +489,11 @@ def compute_woe_table(df, var: str, target_col: str = "mob6_30",
             "total": t,
             "good_prop": good_prop,
             "bad_prop": bad_prop,
-            "bad_rate": bad_rate,
+            "bad_rate": round(bad_rate, 4),
             "woe": round(woe, 4),
-            "iv": round(iv_bin, 4),
-            "ks": round(ks_bin, 4),
-            "lift": round(lift, 4),
+            "iv": round(iv_bin, 2),
+            "ks": round(ks_bin, 2),
+            "lift": round(lift, 2),
         })
 
     result = pd.DataFrame(rows)

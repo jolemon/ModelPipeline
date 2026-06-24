@@ -136,18 +136,14 @@ def _format_woe_table(woe_df: pd.DataFrame) -> pd.DataFrame:
                 else ("inf" if isinstance(x, float) and x == float("inf") else x)
             )
 
-    # Format proportion columns as percentages
+    # Format proportion columns as percentage strings
     for col in ["good_prop", "bad_prop"]:
         if col in out.columns:
             out[col] = out[col].apply(
                 lambda x: f"{float(x):.2%}" if pd.notna(x) and x != "" else x
             )
 
-    # Format bad_rate as percentage
-    if "bad_rate" in out.columns:
-        out["bad_rate"] = out["bad_rate"].apply(
-            lambda x: f"{float(x):.2%}" if pd.notna(x) and x != "" else x
-        )
+    # bad_rate, woe, iv, ks, lift kept as numeric for data bars
 
     final_cols = ["min", "max", "goods", "bads", "total", "good_prop", "bad_prop",
                   "bad_rate", "woe", "iv", "ks", "lift"]
