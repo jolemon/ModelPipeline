@@ -37,7 +37,9 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
     target_col = config.target_col
     score_col = config.resolve_score_column(list(df.columns))
     sc_score_col = config.resolve_sc_score_column(list(df.columns))
+    loan_col = config.loan_amount_col
     flag_labels = config.flag_labels
+    has_amount = bool(loan_col) and loan_col in df.columns
 
     # Get train set score distribution for PSI reference
     train_data = df[df[flag_col] == "train"]
@@ -53,6 +55,7 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
         good = total - bad
         bad_rate = bad / total if total > 0 else 0
 
+        # Standard AUC/KS
         try:
             auc = calc_auc(subset[target_col], subset[score_col])
             ks = calc_ks(subset[target_col], subset[score_col])
@@ -92,6 +95,19 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
             "近期月对比各集合PSI": recent_psi,
         })
 
+        # Amount-weighted AUC/KS
+        if has_amount:
+            weights = subset[loan_col].astype(float)
+            if weights.sum() > 0:
+                try:
+                    rows[-1]["金额KS"] = round(calc_ks(subset[target_col], subset[score_col],
+                                                       sample_weight=weights), 2)
+                    rows[-1]["金额AUC"] = round(calc_auc(subset[target_col], subset[score_col],
+                                                         sample_weight=weights), 2)
+                except ValueError:
+                    rows[-1]["金额KS"] = ""
+                    rows[-1]["金额AUC"] = ""
+
     return pd.DataFrame(rows)
 
 
@@ -100,11 +116,13 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
     target_col = config.target_col
     score_col = config.resolve_score_column(list(df.columns))
     sc_score_col = config.resolve_sc_score_column(list(df.columns))
+    loan_col = config.loan_amount_col
     date_col = config.date_col
     flag_col = config.flag_col
 
     monthly = calc_monthly_metrics(df, target_col=target_col,
-                                   score_col=score_col, date_col=date_col)
+                                   score_col=score_col, date_col=date_col,
+                                   loan_amount_col=loan_col)
 
     # Train+test combined as reference for PSI
     train_test = df[df[flag_col].isin(["train", "test"])]
@@ -172,6 +190,8 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             "坏占比": f"{row['坏样本率']:.2%}",
             "KS": round(ks_val, 2) if not isinstance(ks_val, float) or not np.isnan(ks_val) else "",
             "AUC": round(auc_val, 2) if not isinstance(auc_val, float) or not np.isnan(auc_val) else "",
+            "金额KS": row.get("金额KS", ""),
+            "金额AUC": row.get("金额AUC", ""),
             "10%lift": lift_vals.get("10%", ""),
             "5%lift": lift_vals.get("5%", ""),
             "2%lift": lift_vals.get("2%", ""),

@@ -11,8 +11,9 @@ from model_report.metrics import (
 
 class TestCalcAuc:
     def test_perfect_separation(self):
-        y_true = np.array([0, 0, 0, 1, 1, 1])
-        y_score = np.array([0.1, 0.2, 0.3, 0.7, 0.8, 0.9])
+        # good=1 is positive class → high score = good, low score = bad
+        y_true = np.array([0, 0, 0, 1, 1, 1])      # 0=good, 1=bad
+        y_score = np.array([0.9, 0.8, 0.7, 0.3, 0.2, 0.1])  # goods have high scores
         auc = calc_auc(y_true, y_score)
         assert auc == 1.0
 
@@ -30,8 +31,9 @@ class TestCalcAuc:
 
 class TestCalcKs:
     def test_perfect_separation(self):
-        y_true = np.array([0, 0, 0, 1, 1, 1])
-        y_score = np.array([0.1, 0.2, 0.3, 0.7, 0.8, 0.9])
+        # good=1 is positive class → high score = good
+        y_true = np.array([0, 0, 0, 1, 1, 1])      # 0=good, 1=bad
+        y_score = np.array([0.9, 0.8, 0.7, 0.3, 0.2, 0.1])  # goods have high scores
         ks = calc_ks(y_true, y_score)
         assert ks == 1.0
 

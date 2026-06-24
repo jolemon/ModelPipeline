@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_curve, auc as sklearn_auc
 from scipy import stats
 
 
@@ -9,17 +9,26 @@ def to_month(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce").dt.strftime("%Y%m")
 
 
-def calc_auc(y_true, y_score) -> float:
-    """Calculate AUC from true labels and predicted scores."""
+def calc_auc(y_true, y_score, sample_weight=None) -> float:
+    """Calculate AUC — trapezoidal method matching model_learn model_metrics_v4.
+
+    Uses good=1 as positive class (consistent with model_library/model_learn.py).
+    """
     unique_labels = np.unique(y_true)
     if len(unique_labels) < 2:
         raise ValueError("y_true must contain both positive and negative samples for AUC")
-    return float(roc_auc_score(y_true, y_score))
+    good_flag = 1 - np.array(y_true)  # good=1, bad=0
+    fpr, tpr, _ = roc_curve(good_flag, y_score, pos_label=1, sample_weight=sample_weight)
+    return float(sklearn_auc(fpr, tpr))
 
 
-def calc_ks(y_true, y_score) -> float:
-    """Calculate KS statistic from true labels and predicted scores."""
-    fpr, tpr, _ = roc_curve(y_true, y_score)
+def calc_ks(y_true, y_score, sample_weight=None) -> float:
+    """Calculate KS — matching model_learn model_metrics_v4.
+
+    Uses good=1 as positive class (consistent with model_library/model_learn.py).
+    """
+    good_flag = 1 - np.array(y_true)  # good=1, bad=0
+    fpr, tpr, _ = roc_curve(good_flag, y_score, pos_label=1, sample_weight=sample_weight)
     return float(np.max(tpr - fpr))
 
 
@@ -177,14 +186,21 @@ def calc_score_psi(expected_scores, actual_scores, bins: int = 10) -> float:
 
 def calc_monthly_metrics(df, target_col: str = "mob6_30",
                          score_col: str = "pred_score",
-                         date_col: str = "loan_date") -> "pd.DataFrame":
-    """Calculate AUC/KS/badrate by month."""
+                         date_col: str = "loan_date",
+                         loan_amount_col: str = "") -> "pd.DataFrame":
+    """Calculate AUC/KS/badrate by month.
+
+    If loan_amount_col is provided and exists in df, also computes
+    amount-weighted AUC/KS (matching model_learn calc_auc_ks_by_month).
+    """
     import pandas as pd
 
     tmp = df.copy()
     tmp["loan_month"] = to_month(tmp[date_col])
     tmp = tmp.dropna(subset=["loan_month"])
     tmp = tmp[tmp["loan_month"] != "nan"]
+
+    has_amount = bool(loan_amount_col) and loan_amount_col in tmp.columns
 
     rows = []
     months = sorted(tmp["loan_month"].unique())
@@ -203,22 +219,40 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
         good = total - bad
         badrate = bad / total if total > 0 else 0
 
+        # Standard AUC/KS
+        std_auc, std_ks = float("nan"), float("nan")
         try:
-            auc = calc_auc(m_data[target_col], m_data[score_col])
-            ks = calc_ks(m_data[target_col], m_data[score_col])
+            std_auc = calc_auc(m_data[target_col], m_data[score_col])
+            std_ks = calc_ks(m_data[target_col], m_data[score_col])
         except ValueError:
-            auc = float("nan")
-            ks = float("nan")
+            pass
 
-        rows.append({
+        # Amount-weighted AUC/KS
+        amt_auc, amt_ks = "", ""
+        if has_amount:
+            weights = m_data[loan_amount_col].astype(float)
+            if weights.sum() > 0:
+                try:
+                    amt_auc = round(calc_auc(m_data[target_col], m_data[score_col],
+                                             sample_weight=weights), 4)
+                    amt_ks = round(calc_ks(m_data[target_col], m_data[score_col],
+                                           sample_weight=weights), 4)
+                except ValueError:
+                    pass
+
+        row = {
             "观察点月": m,
             "总": total,
             "好": good,
             "坏": bad,
             "坏样本率": round(badrate, 4),
-            "KS": round(ks, 4) if not np.isnan(ks) else ks,
-            "AUC": round(auc, 4) if not np.isnan(auc) else auc,
-        })
+            "KS": round(std_ks, 4) if not np.isnan(std_ks) else std_ks,
+            "AUC": round(std_auc, 4) if not np.isnan(std_auc) else std_auc,
+        }
+        if has_amount:
+            row["金额KS"] = amt_ks if amt_ks != "" else ""
+            row["金额AUC"] = amt_auc if amt_auc != "" else ""
+        rows.append(row)
 
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
 

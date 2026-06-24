@@ -15,6 +15,9 @@ class ReportConfig:
     # Extra columns to exclude from variable analysis
     exclude_columns: list = field(default_factory=list)
 
+    # Optional: loan amount column for amount-weighted AUC/KS
+    loan_amount_col: str = ""
+
     # Labels
     target_label: str = "Mob6 30+"
     train_label: str = "训练集"
