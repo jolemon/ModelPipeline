@@ -71,23 +71,16 @@ class ReportGenerator:
         # ── Sheet 1 ──
         _step(1, 3, "模型设计 — 样本分区分布 + 建模分 + 效果汇总")
         sheet1 = build_model_design_sheet(data, self.config)
-        _log(f"  分区分布: {len(sheet1.get('样本分区分布', []))} 行")
-        _log(f"  建模分: {len(sheet1.get('样本建模分', []))} 行")
         _ok()
 
         # ── Sheet 2 ──
         _step(2, 3, "变量分析 — 指标总览 + WOE 分箱")
         sheet2 = build_variable_analysis_sheet(data, self.scorecard, self.config, self._metadata)
-        n_vars = len(sheet2.get("变量总览", []))
-        n_woe = len(sheet2.get("Top10 单变量 WOE 分箱分析", []))
-        _log(f"  变量数: {n_vars} | WOE 分箱: {n_woe} 个")
         _ok()
 
         # ── Sheet 3 ──
         _step(3, 3, "模型表现 — 评分卡详情 + 效果 + 回溯 + 分箱")
         sheet3 = build_model_performance_sheet(data, self.scorecard, self.config)
-        n_bin = len(sheet3.get("分箱表现", []))
-        _log(f"  分箱表现: {n_bin} 个分区")
         _ok()
 
         _print_header("报告生成完成")
