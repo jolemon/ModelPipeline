@@ -21,16 +21,21 @@ sc_score = np.clip(sc_score, 300, 900).astype(int)
 pred = 1 - (sc_score - 300) / 600
 pred = np.clip(pred, 0.001, 0.999)
 
-# date: spread over 12 months
-months = [f"2025{m:02d}" for m in range(1, 13)]
-dates = np.random.choice(months, n)
+# Time-split: months 1-8 train/test, 9-10 oot, 11-12 oos (表现期未满6个月)
+month_labels = [f"2025{m:02d}" for m in range(1, 13)]
+# Distribute roughly evenly across 12 months
+dates = np.random.choice(month_labels, n)
+# Flag assignment based on month
+flags = np.empty(n, dtype=object)
+for i in range(n):
+    m = int(dates[i][4:])
+    if m <= 8:
+        flags[i] = "train" if np.random.random() < 0.8 else "test"
+    elif m <= 10:
+        flags[i] = "oot"
+    else:
+        flags[i] = "oos"
 loan_dates = [f"{m[:4]}-{m[4:]}-15" for m in dates]
-
-# Split: 60% train, 15% test, 20% oot, 5% oos
-flags = np.random.choice(
-    ["train", "test", "oot", "oos"], n,
-    p=[0.60, 0.15, 0.20, 0.05]
-)
 
 # Features: 8 random features with varying predictive power
 feat_cols = {

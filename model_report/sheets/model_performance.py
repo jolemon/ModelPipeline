@@ -41,8 +41,9 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
     flag_labels = config.flag_labels
     has_amount = bool(loan_col) and loan_col in df.columns
 
-    # Get train set score distribution for PSI reference
+    # Reference sets for PSI
     train_data = df[df[flag_col] == "train"]
+    oot_data = df[df[flag_col] == "oot"]
 
     rows = []
     for flag in ["train", "test", "oot"]:
@@ -65,7 +66,7 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
             ks = float("nan")
             lift_vals = {"10%": "", "5%": "", "2%": "", "1%": ""}
 
-        # PSI vs train (for train itself, PSI is "/")
+        # PSI vs train set score distribution
         if flag == "train":
             train_psi = "/"
         elif len(train_data) > 0 and sc_score_col in df.columns:
@@ -74,8 +75,14 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
         else:
             train_psi = ""
 
-        # PSI vs recent month (simplified: same as train PSI for now)
-        recent_psi = ""
+        # PSI vs OOT set score distribution
+        if flag == "oot":
+            oot_psi = "/"
+        elif len(oot_data) > 0 and sc_score_col in df.columns:
+            psi_v = calc_score_psi(oot_data[sc_score_col], subset[sc_score_col])
+            oot_psi = f"{psi_v:.4f}"
+        else:
+            oot_psi = ""
 
         rows.append({
             "样本集": flag_labels.get(flag, flag),
@@ -92,7 +99,7 @@ def _build_sample_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame
             "2%lift": lift_vals.get("2%", ""),
             "1%lift": lift_vals.get("1%", ""),
             "train和各集合的PSI": train_psi,
-            "近期月对比各集合PSI": recent_psi,
+            "跨时间验证集对比各集合PSI": oot_psi,
         })
 
         # Amount-weighted AUC/KS
