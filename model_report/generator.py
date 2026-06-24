@@ -50,7 +50,6 @@ class ReportGenerator:
     def _validate_data(self, data: pd.DataFrame) -> None:
         """Validate that required columns exist."""
         required = [
-            self.config.partition_col,
             self.config.flag_col,
             self.config.target_col,
         ]

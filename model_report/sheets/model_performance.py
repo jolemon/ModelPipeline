@@ -3,7 +3,7 @@ import numpy as np
 from model_report.config import ReportConfig
 from model_report.metrics import (
     calc_auc, calc_ks, calc_lift, calc_bin_metrics,
-    calc_monthly_metrics, calc_score_psi,
+    calc_monthly_metrics, calc_score_psi, to_month,
 )
 
 
@@ -112,14 +112,14 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
     first_month = monthly[monthly["观察点月"] != "all"].iloc[0]["观察点月"] \
         if len(monthly[monthly["观察点月"] != "all"]) > 0 else None
     first_month_data = df[
-        df[date_col].astype(str).str.replace("-", "").str[:6] == first_month
+        to_month(df[date_col]) == first_month
     ] if first_month else None
 
     # Recent month
     recent_month = monthly[monthly["观察点月"] != "all"].iloc[-1]["观察点月"] \
         if len(monthly[monthly["观察点月"] != "all"]) > 0 else None
     recent_month_data = df[
-        df[date_col].astype(str).str.replace("-", "").str[:6] == recent_month
+        to_month(df[date_col]) == recent_month
     ] if recent_month else None
 
     rows = []
@@ -129,7 +129,7 @@ def _build_backtest_effect(df: pd.DataFrame, config: ReportConfig) -> pd.DataFra
             continue
 
         month_data = df[
-            df[date_col].astype(str).str.replace("-", "").str[:6] == month
+            to_month(df[date_col]) == month
         ]
 
         flags_in_month = month_data[flag_col].unique()
@@ -239,17 +239,20 @@ def _build_bin_performance(df: pd.DataFrame, config: ReportConfig) -> list:
         except Exception:
             continue
 
-    # Per partition month
-    partitions = sorted(df[partition_col].astype(str).unique())
-    for part in partitions:
-        subset = df[df[partition_col].astype(str) == part]
+    # Per month derived from date column
+    date_col = config.date_col
+    df = df.copy()
+    df["_loan_month"] = to_month(df[date_col])
+    months = sorted(df["_loan_month"].unique())
+    for month in months:
+        subset = df[df["_loan_month"] == month]
         if len(subset) < n_bins * 2:
             continue
         try:
             labels = pd.cut(subset[sc_score_col], bins=n_bins, precision=0, include_lowest=True)
             result = calc_bin_metrics(subset[target_col], subset[sc_score_col],
                                       pd.Series(labels.cat.categories))
-            results.append((part, result))
+            results.append((month, result))
         except Exception:
             continue
 

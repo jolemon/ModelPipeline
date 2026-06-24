@@ -1,6 +1,12 @@
 import numpy as np
+import pandas as pd
 from sklearn.metrics import roc_auc_score, roc_curve
 from scipy import stats
+
+
+def to_month(series: pd.Series) -> pd.Series:
+    """Convert date series to yyyyMM string: 2025-1-6 → 202501."""
+    return pd.to_datetime(series, errors="coerce").dt.strftime("%Y%m")
 
 
 def calc_auc(y_true, y_score) -> float:
@@ -176,7 +182,7 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
     import pandas as pd
 
     tmp = df.copy()
-    tmp["loan_month"] = tmp[date_col].astype(str).str.replace("-", "").str[:6]
+    tmp["loan_month"] = to_month(tmp[date_col])
     tmp = tmp.dropna(subset=["loan_month"])
     tmp = tmp[tmp["loan_month"] != "nan"]
 

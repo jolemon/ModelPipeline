@@ -1,5 +1,6 @@
 import pandas as pd
 from model_report.config import ReportConfig
+from model_report.metrics import to_month
 
 
 def build_model_design_sheet(data: pd.DataFrame, config: ReportConfig) -> dict:
@@ -22,18 +23,22 @@ def build_model_design_sheet(data: pd.DataFrame, config: ReportConfig) -> dict:
 
 
 def _build_partition_distribution(df: pd.DataFrame, config: ReportConfig) -> pd.DataFrame:
-    """Build partition distribution table."""
+    """Build partition distribution table, grouped by loan_month × data_flag."""
     flag_col = config.flag_col
-    part_col = config.partition_col
     target_col = config.target_col
+    date_col = config.date_col
     flag_labels = config.flag_labels
 
-    rows = []
-    partitions = sorted(df[part_col].astype(str).unique())
+    # Derive month from date column (2025-01-15 → 202501)
+    df = df.copy()
+    df["_loan_month"] = to_month(df[date_col])
 
-    for part in partitions:
+    rows = []
+    months = sorted(df["_loan_month"].unique())
+
+    for month in months:
         for flag in ["train", "test", "oot", "oos"]:
-            subset = df[(df[part_col].astype(str) == part) & (df[flag_col] == flag)]
+            subset = df[(df["_loan_month"] == month) & (df[flag_col] == flag)]
             if len(subset) == 0:
                 continue
             bad = int(subset[target_col].sum())
@@ -42,7 +47,7 @@ def _build_partition_distribution(df: pd.DataFrame, config: ReportConfig) -> pd.
             bad_rate = bad / total if total > 0 else 0
             rows.append({
                 "样本数据集划分标签": flag_labels.get(flag, flag),
-                "样本分区": part,
+                "样本分区": month,
                 "好": good,
                 "坏": bad,
                 "总数": total,
