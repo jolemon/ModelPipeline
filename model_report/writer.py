@@ -152,7 +152,7 @@ class ExcelWriter:
                     rule = DataBarRule(
                         start_type="min",
                         end_type="max",
-                        color="5B9BD5",
+                        color="FF5B9BD5",
                         showValue=True,
                     )
                     ws.conditional_formatting.add(
