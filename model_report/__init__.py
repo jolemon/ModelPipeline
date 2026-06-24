@@ -1,4 +1,4 @@
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from model_report.config import ReportConfig
 from model_report.generator import ReportGenerator
