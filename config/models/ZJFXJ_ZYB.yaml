@@ -1,0 +1,21 @@
+# ZJFXJ_ZYB 模型专属配置
+# 仅包含高频参数，会覆盖 config.yaml 中的同名配置
+
+project:
+  work_no: "01011939"
+  model_id: "ZJFXJ_ZYB"
+  model_file_id: "zjfxj_zyb_lgb_v1"
+  product_code: "ZJFXJ"
+  date_format: "yyyyMMdd"
+  target_platform: ""
+  platform_alias: "zj"
+
+sample:
+  table_name: tmp_${work_no}_20260428_${product_code}_huisu_sample
+  key: apply_no
+  fields:
+    - apply_no
+    - cust_id
+    - cert_no
+    - issue_time
+    - apply_mth

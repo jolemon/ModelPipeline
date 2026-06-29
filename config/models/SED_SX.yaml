@@ -1,0 +1,33 @@
+# SED_SX 模型专属配置
+# 仅包含高频参数，会覆盖 config.yaml 中的同名配置
+
+project:
+  work_no: "01011939"
+  model_id: "SED_SX"
+  model_file_id: "SED_SX_lgb_model"
+  product_code: "SED_SX"
+  date_format: "yyyyMMdd"
+  target_platform: ""
+  platform_alias: "myjb"
+
+model:
+  path: input/${model_file_id}.model
+
+sample:
+  table_name: tmp_${work_no}_20260629_${product_code}_huisu_sample
+  key: apply_no
+  fields:
+    - apply_no
+    - cust_id
+    - cert_no
+    - issue_time
+    - apply_mth
+
+output:
+  table_name: tmp_${work_no}_20260629_${product_code}_var_output
+
+pipeline:
+  mode: temp_table
+  save_sql: output/${model_id}_pipeline_output.sql
+  save_report: output/${model_id}_pipeline_report.md
+  generate_score: true
