@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# 项目特定
+config/*.pkl
+config/*.pickle
+output/*
+input/*
+
+# 例外：保留目录结构
+!input/.gitkeep
+!output/.gitkeep

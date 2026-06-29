@@ -1,0 +1,746 @@
+# lgb2sql 全局配置文件
+# 使用 ${work_no}、${model_id}、${product_code} 变量实现一处修改，多处生效
+#
+# 配置分层（按修改频率降序）：
+# [高频] 第1层：核心标识 — 每次换模型必改
+# [高频] 第2层：输入输出 — 每次换模型必改
+# [中频] 第3层：平台与业务规则 — 业务调整时修改
+# [低频] 第4层：SQL生成参数 — 环境升级时修改
+# [几乎不动] 第5层：环境映射 — 首次配置后固定
+
+# ============================================
+# [高频] 第1层：核心标识
+# ============================================
+project:
+  work_no: "01011939"                         # 工作编号/项目编号
+  model_id: "JDJT_GKB"                       # 模型编号（影响临时表命名）
+  model_file_id: "jdjt_gkb_20260316_lgb_best_plus"  # 模型文件标识（用于模型文件名）
+  product_code: "JDJT"                        # 产品代码（用于变量替换、prd_sub_cls_cd条件）
+  date_format: "yyyyMMdd"                     # 日期格式
+  target_platform: ""                        # 行为歧义变量解析时优先匹配的目标底座，如"字节"、"京东白条"、"贷中行为变量-新底座"等
+  platform_alias: "jdjt"                      # 平台别名，用于替换表名中的 $platform 占位符（如 jdjt / myjb / zxy）
+
+# ============================================
+# [高频] 第2层：输入输出配置
+# ============================================
+
+# --- 模型文件 ---
+model:
+  path: input/${model_file_id}.model
+
+# --- 样本表 ---
+sample:
+  table_name: tmp_${work_no}_20260428_${product_code}_huisu_sample
+  key: apply_no
+  fields:
+    - apply_no
+    - cust_id
+    - cert_no
+    - issue_time
+    - apply_mth
+
+# --- 输出表 ---
+output:
+  table_name: tmp_${work_no}_20260428_${product_code}_var_output
+  database: ""
+  partition_clause: ""
+  
+  # 样本表额外字段输出控制
+  # true: 在 model_score 和 model_scorecard 表中自动包含 sample.fields 中的所有字段
+  # false: 只输出 keep_columns 中的字段
+  include_sample_fields: true
+  
+  # 保留列（主键等，会输出到最终表）
+  keep_columns:
+    - apply_no
+
+  # 变量字段输出控制（在 model_score 和 model_scorecard 表中）
+  variable_output:
+    enabled: false          # 默认不输出变量字段
+    sort_by_importance: true  # 按特征重要度降序排列
+    top_n: 0                # 输出前N个变量，0表示全部
+
+# --- Pipeline 执行 ---
+pipeline:
+  mode: temp_table
+  save_sql: output/${model_id}_pipeline_output.sql
+  save_report: output/${model_id}_pipeline_report.md
+  generate_score: true
+
+# ============================================
+# [中频] 第3层：平台与业务规则
+# ============================================
+
+behavior_platform_priority:
+  - "贷中行为变量-新底座"
+  - "行为变量-总行"
+  - "行为变量-消金"
+  - "字节"
+  - "京东白条"
+
+variable_overrides:
+  # 格式: 变量名: {source_table: 表名}
+  # unclear_terms:
+  #   source_table: "wdyy.t_zxysblhs_zxys_dz_realtime_rollback"
+
+blacklist_vars:
+  # - "sensitive_var_name"
+
+credit_primary_table:
+  enabled: true
+  table_name: "wdyy_mrs.t_pbci_summary_other"
+  primary_key: "ci_rpt_id"
+  sample_link_key: "be_qry_cert_num"
+  sample_bridge_key: "cert_no"
+  partition_field: "part_id"
+  time_field: "rpt_tm"
+  sample_time_field: "issue_time"
+  time_window_days: 90
+  md5_transform: true
+  time_expr: "to_date(substr({field}, 1, 10))"
+  sample_expr: "to_date({field})"
+  direction: "<="
+
+# ============================================
+# [低频] 第4层：SQL生成参数
+# ============================================
+
+sql_generation:
+  # 最大子查询关联数（同一张临时表内JOIN的子查询数量上限）
+  # 超过此数量时，自动拆分为多个临时表
+  max_subquery_join: 3
+
+  # 子查询分组策略（当表数量超过max_subquery_join时，如何拆分为多个临时表）
+  # sequential: 顺序切分（先装满第一组）
+  # balanced: 均衡分配（尽量让每组子查询数量接近）
+  subgroup_strategy: balanced
+
+  # 空值填充值
+  coalesce_value: -999999
+
+  # 分区字段
+  partition_field: "dt"
+
+  # 分区变量名（用于替换）
+  # [注意] 当前配置下未被直接使用：所有表均已通过 partition_control / time_range_joins
+  # 显式配置分区策略，无表回退到默认的 dt = '${biz_date}' 等值匹配。
+  # 保留作为新增表未配置时的默认回退机制。
+  partition_var: "${biz_date}"
+
+  # 是否启用组内合并（同一平台的多张临时表合并为中间总表）
+  # 例如：征信变量的4个part临时表合并为1个PBCI总表
+  group_merge: true
+
+  # 征信平台列表（这些平台会使用 PBCI 桥接表机制，通过 ci_rpt_id 关联）
+  # 其他包含"征信"字样的平台（如"中征信"）不属于此列，使用各自真实主键
+  credit_platforms:
+    - "征信变量-总行"
+    - "征信变量-消金"
+
+  # JOIN类型配置（按分类/平台指定JOIN类型）
+  # 默认LEFT JOIN，可配置为JOIN（内连接）
+  join_types:
+    by_category:
+      "征信变量": "JOIN"
+      "行为变量": "LEFT JOIN"
+    by_platform:
+      "征信变量-消金": "JOIN"
+      "征信变量-总行": "JOIN"
+      "行为变量-总行": "LEFT JOIN"
+      "行为变量-消金": "LEFT JOIN"
+      "贷中行为变量-新底座": "LEFT JOIN"
+
+  # 分区控制策略配置
+  # 用于控制子查询中的分区条件生成方式
+  # strategy: equality(等值匹配) | range(范围匹配)
+  # partition_field: 分区字段名
+  # min_partition: range策略下的最早分区值（数字或字符串）
+  #
+  # 配置位置说明：
+  # 1. default: 默认策略，所有未单独配置的表使用此策略
+  # 2. by_category: 按变量分类配置（如"征信变量"、"行为变量"）
+  # 3. by_platform: 按平台配置（如"征信变量-消金"、"行为变量-总行"），优先级高于by_category
+  # 4. by_table: 按表名配置（最高优先级，覆盖其他配置）
+  #
+  # 优先级：by_table > by_platform > by_category > default
+  partition_control:
+    # 默认策略：所有表默认使用范围查询
+    default:
+      strategy: "range"
+      partition_field: "dt"
+      min_partition: "202401"
+    
+    # 按分类配置（category字段）
+    # 各类型的最早分区配置位置：
+    by_category:
+      # 征信变量：使用 part_id 分区，最早从 202512 开始
+      "征信变量":
+        strategy: "range"
+        partition_field: "part_id"
+        min_partition: "202512"
+      
+      # 行为变量：使用 dt 分区，最早从 202601 开始
+      "行为变量":
+        strategy: "range"
+        partition_field: "dt"
+        min_partition: "202601"
+
+      # 贷中行为变量：使用 data_dt 分区，最早从 20260227 开始
+      "贷中行为变量":
+        strategy: "range"
+        partition_field: "data_dt"
+        min_partition: "20260227"
+      
+      # 外部数据：使用 dt 分区，最早从 202512 开始
+      "外部数据":
+        strategy: "range"
+        partition_field: "dt"
+        min_partition: "202512"
+    
+    # 按平台配置（优先级高于by_category）
+    # 如需为特定平台单独配置，在此添加：
+    by_platform:
+      # 贷中行为变量-新底座：使用 data_dt 分区，最早从 20260227 开始
+      # 优先级高于 by_category 中的 "行为变量" 配置
+      "贷中行为变量-新底座":
+        strategy: "range"
+        partition_field: "data_dt"
+        min_partition: "20260227"
+    
+    # 按表配置（最高优先级）
+    # 如需为特定表单独配置，在此添加：
+    by_table:
+      # 中征信：使用 part_id 分区，最早从 202408 开始
+      "jsbrpt_mrs.v_ods_02_all_zzxqsf_md5":
+        strategy: "range"
+        partition_field: "part_id"
+        min_partition: "202408"
+
+  # 临时表命名风格
+  # simple: 简短命名（unk_001, bh1等）
+  # descriptive: 描述性命名（PBCI_part1, bh_Crdt_Info_Stats等）
+  naming_style: "descriptive"
+
+# ==================== 后处理配置 ====================
+post_process:
+  deduplicate: true                   # 是否去重
+  dedup_keys:                         # 去重键
+    - apply_no
+  dedup_order_field: dt               # 去重排序字段
+  dedup_order_desc: true              # 是否降序（取最新）
+  fill_null: true                     # 是否填充空值
+  fill_value: -999999                 # 空值填充值
+  null_flag: true                     # 是否标记全空样本
+  null_flag_name: all_null_flag       # 全空标记字段名
+
+# ==================== 评分卡配置（可选） ====================
+scorecard:
+  base_score: 700                     # 基础分
+  pdo: 0.1                            # PDO（翻倍odds分差）
+  odds_at_base: 50                    # 基础分对应odds
+  score_min: 300                      # 最低分
+  score_max: 900                      # 最高分
+
+# ==================== 变量类型英文映射（用于临时表命名） ====================
+var_type_mapping:
+  行为变量: "bh"
+  征信变量: "pbci"
+  外部数据: "ed"
+  模型分: "modelscore"
+  未知: "unknown"
+
+# ==================== 平台英文映射（用于临时表命名中的细分） ====================
+platform_mapping:
+  百融: "br"
+  字节: "zj"
+  京东白条: "jdbt"
+  征信变量-总行: "zh_pbci"
+  征信变量-消金: "xj_pbci"
+  行为变量-总行: "zh_bh"
+  行为变量-消金: "xj_bh"
+  度小满: "dxm"
+  京东: "jd"
+  腾讯: "tencent"
+  天创: "tianchuang"
+  友盟: "umeng"
+  同盾: "tongdun"
+  天辰: "tianchen"
+  中征信: "zzx"
+  贷中行为变量-新底座: "bh_new"
+  外部数据: "ed"
+  模型分: "modelscore"
+
+# ==================== 变量覆盖配置（处理异常变量） ====================
+# 当变量无法自动匹配元数据，或匹配多张表时，可在此指定显式来源表
+# 关联键和分区字段自动从 table_join_keys 或元数据默认值获取
+# 优先级高于元数据自动匹配
+variable_overrides:
+  # 格式: 变量名: {source_table: 表名}
+  # 示例:
+  # unclear_terms:
+  #   source_table: "wdyy.t_zxysblhs_zxys_dz_realtime_rollback"
+  # loan_amt_m1:
+  #   source_table: "T_CC_Cust_Repay_Info_Stats"
+
+# ==================== 各表关联键配置（覆盖metadata.yaml默认值） ====================
+# 按分类和平台规则自动生成：
+# 1. 征信变量 → join_key: ci_rpt_id（不需要分区字段关联）
+# 2. 模型分 → join_key: cert_no
+# 3. 行为变量 → join_key: cust_id
+# 4. 中征信平台 → join_key: part_id
+table_join_keys:
+  # === 行为变量-新底座 (6张表) ===
+  "ads.ads_risk_$platform_cust_dz_indicator_ss":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  "ads.ads_risk_$platform_cust_dzys_indicator_ss":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  "ads.ads_risk_$platform_party_dz_indicator_ext02_ss":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  "ads.ads_risk_$platform_party_dz_indicator_ext04_ss":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  "ads.ads_risk_$platform_party_dz_indicator_ext05_ss":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  "ads.ads_risk_$platform_party_dz_indicator_ext06_ss_doris":
+    join_key: "cert_no"
+    partition_field: "data_dt"
+  # === 外部数据-中征信 (1张表) ===
+  "jsbrpt_mrs.v_ods_02_all_zzxqsf_md5":
+    join_key: "cert_no"
+    partition_field: "part_id"
+  # === 外部数据 (4张表) ===
+  "edap_mrs.APOLLO_INFO_MAIN":
+    join_key: "cert_no"
+    partition_field: "dt"
+  "edap_mrs.BRDT_APPLYLOANSTR":
+    join_key: "cert_no"
+    partition_field: "dt"
+  "edap_mrs.BR_APPLYLOANSTR":
+    join_key: "cert_no"
+    partition_field: "dt"
+  "edap_mrs.FQZ_BRDT_PF, FQZ_BRDT_DZPF":
+    join_key: "cert_no"
+    partition_field: "dt"
+  # === 外部数据-度小满 (1张表) ===
+  "unknown.unknown":
+    join_key: "cert_no"
+    partition_field: "dt"
+  # === 征信变量-消金 (16张表) ===
+  "jsbrpt_mrs.zxbl_his_ext_credit_deriva_param06_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_icr_result02_his":
+    join_key: "reportno"
+  "jsbrpt_mrs.zxbl_his_icr_result03_his":
+    join_key: "reportno"
+  "jsbrpt_mrs.zxbl_his_icr_result04_his":
+    join_key: "reportno"
+  "jsbrpt_mrs.zxbl_his_icr_result05_his":
+    join_key: "reportno"
+  "jsbrpt_mrs.zxbl_his_icr_result_his":
+    join_key: "reportno"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_ext01_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_ext02_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_ext03_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_ext04_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_ext05_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_dz_realtime_rollback":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_extra_rollback":
+    join_key: "pboc_bs61_073"
+  "jsbrpt_mrs.zxbl_his_zxys_fuzhai_param_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_rumo_param_roll":
+    join_key: "report_no"
+  "jsbrpt_mrs.zxbl_his_zxys_shangcai_param_roll":
+    join_key: "report_no"
+  # === 征信变量-总行 (6张表) ===
+  "wdyy_mrs.T_PBCI_ACCT_AMT_MAIN":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_PBCI_LIMIT_USE_OTHER":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_PBCI_OVERDUE":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_PBCI_QUERY":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_PBCI_RATIO_APPROVERATE":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_PBCI_SUMMARY_OTHER":
+    join_key: "ci_rpt_id"
+    partition_field: "part_id"
+  # === 模型分 (1张表) ===
+  "sykj1.model_score_recall":
+    join_key: "cert_no"
+    partition_field: "dt"
+  # === 行为变量-字节 (12张表) ===
+  "wdyy.C01_CCRDYYF_CUST_PRD_INFO_M":
+    join_key: "cust_id"
+    partition_field: "dt"
+  "wdyy.T_CCRDYYF_Cust_Acct_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Active_Situ_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Bal_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Cnsm_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Crdt_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Instmt_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Lmt_Chg_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Ovd_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Prft_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Repay_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CCRDYYF_Cust_Revl_Use_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  # === 行为变量-京东白条 (11张表) ===
+  "wdyy.t_ccrbt_cust_acct_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_active_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_bal_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_cnsm_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_crdt_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_instmt_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_lmt_chg_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_ovd_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_prft_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_repay_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.t_ccrbt_cust_revl_use_info":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  # === 行为变量-总行 (6张表) ===
+  "wdyy_mrs.T_CC_Cust_Crdt_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_CC_Cust_Draw_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_CC_Cust_Lmt_Chg_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_CC_Cust_Lmt_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_CC_Cust_Ovd_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy_mrs.T_CC_Cust_Repay_Info_Stats":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  # === 行为变量-新追加表 (4张表) ===
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_A":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_B":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_C":
+    join_key: "cust_id"
+    partition_field: "part_id"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_INDEX":
+    join_key: "cust_id"
+    partition_field: "part_id"
+
+# ==================== 禁用变量黑名单配置 ====================
+# 当入模变量出现在此列表中时，输出报告会进行告警提示
+# 用于标记敏感变量、合规禁用变量或已知有问题的变量
+#
+# 支持两种配置方式（合并生效）：
+# 1. blacklist_vars: 直接在 YAML 中列变量名
+# 2. blacklist_file: 指定外部清单文件路径（每行一个变量名）
+#
+# 优先级：blacklist_vars（YAML中直接定义） + blacklist_file（外部文件）合并使用
+# 适用于全局通用禁用清单 + 模型专属补充变量的场景
+
+blacklist_file: "data/禁用变量清单.txt"   # 全局禁用变量清单文件路径
+
+blacklist_vars:
+  # 示例：模型专属补充禁用变量
+  # - "sensitive_var_name"
+  # - "problematic_feature_v1"
+  # - "cust_id_card"
+
+# ==================== 自定义JOIN条件配置 ====================
+# 用于配置复杂的表关联条件（如MD5转换、时间偏移、多字段关联等）
+# 优先级：表 > 平台 > 分类
+#
+# 配置项说明：
+#   join_key: 关联键（覆盖默认的join_key）
+#   sample_key: 样本表关联字段（默认与join_key相同）
+#   md5_transform: 是否对关联字段进行MD5转换（样本字段 = MD5(表字段)）
+#   time_offset: 时间偏移配置
+#     field: 样本表时间字段
+#     offset_days: 偏移天数（负数为提前）
+#     target_field: 目标表时间字段
+#     target_expr: 目标表时间字段表达式（可选）
+#   custom_on_clause: 自定义ON条件（完全覆盖默认的ON条件）
+#
+custom_join_conditions:
+  # === 贷中行为变量-消金（使用cert_no + MD5 + 时间偏移） ===
+  by_table:
+    "ads.ads_risk_$platform_cust_dz_indicator_ss":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+    "ads.ads_risk_$platform_cust_dzys_indicator_ss":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+    "ads.ads_risk_$platform_party_dz_indicator_ext02_ss":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+    "ads.ads_risk_$platform_party_dz_indicator_ext04_ss":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+    "ads.ads_risk_$platform_party_dz_indicator_ext05_ss":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+    "ads.ads_risk_$platform_party_dz_indicator_ext06_ss_doris":
+      join_key: "cert_no"
+      sample_key: "cert_no"
+      md5_transform: true
+      time_offset:
+        field: "issue_time"
+        offset_days: -2
+        target_field: "data_dt"
+        target_expr: "cast(to_char(to_date({field}, 'yyyyMMdd') - 2, 'yyyyMMdd') AS int)"
+
+# ==================== 时间区间匹配配置 ====================
+# 用于配置需要通过时间区间或等号匹配关联的表
+# 支持两种匹配模式：
+#   - equality: 等号匹配（如 part_id+1月 = issue_time月份）
+#   - range: 范围匹配（如 part_id <= issue_time，且窗口内）
+#
+# 配置项说明：
+#   match_mode: 匹配模式，可选 equality（等号）或 range（范围，默认）
+#   time_field: 该表的时间字段名
+#   sample_time_field: 样本表的时间字段名（用于比较）
+#   time_expr: 表时间字段的转换表达式，{field} 会被替换为字段名
+#   sample_expr: 样本时间字段的转换表达式，{field} 会被替换为字段名
+#
+#   range模式额外需要：
+#   time_function: 时间函数，可选 DATEDIFF 或 MONTHS_BETWEEN
+#   window: 时间窗口长度
+#   direction: 时间方向约束，可选 <= 或 >=（表时间 相对于 样本时间）
+#
+# 注意：
+#   - equality模式：子查询不限制 partition_field = '${biz_date}'，允许跨月份匹配
+#   - range模式：子查询限制 partition_field = '${biz_date}'，需要配合ROW_NUMBER去重
+#
+time_range_joins:
+  # === 行为变量-总行（等号匹配：part_id的上一个月 = issue_time的月份） ===
+  "wdyy_mrs.T_CC_Cust_Crdt_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy_mrs.T_CC_Cust_Repay_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy_mrs.T_CC_Cust_Draw_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy_mrs.T_CC_Cust_Lmt_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy_mrs.T_CC_Cust_Lmt_Chg_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy_mrs.T_CC_Cust_Ovd_Info_Stats":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_A":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_B":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_PS_C":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  "wdyy.T_CC_CUST_BEHAV_VARBL_INDEX":
+    match_mode: "equality"
+    time_field: "part_id"
+    sample_time_field: "issue_time"
+    time_expr: "to_char(TO_DATE({field}::text, 'YYYYMM') + INTERVAL '1 month', 'YYYYMM')"
+    sample_expr: "to_char(TO_DATE({field}::text, 'YYYYMMdd'), 'YYYYMM')"
+  # === 外部数据-中征信（范围匹配：score_date在issue_time前3个月内，取最新一条） ===
+  "jsbrpt.v_ods_02_all_zzxqsf_md5":
+    match_mode: "range"
+    time_field: "score_date"
+    sample_time_field: "issue_time"
+    time_expr: "from_unixtime(unix_timestamp(CAST({field} AS string), 'yyyyMMdd'), 'yyyy-MM-dd')"
+    sample_expr: "to_date({field}, 'yyyyMMdd')"
+    time_function: "MONTHS_BETWEEN"
+    window: 3
+    direction: "between"
+    dedup: true
+    dedup_partition_by: "${sample_key}"
+    dedup_order_by: "score_date DESC"
+    output_time_field: "formatted_score_date"
+  # === 外部数据-百融APOLLO（范围匹配：近3个月内最近一条） ===
+  "edap_mrs.APOLLO_INFO_MAIN":
+    match_mode: "range"
+    time_field: "${qry_date}"
+    sample_time_field: "issue_time"
+    time_expr: "{field}"
+    sample_expr: "to_date({field}, 'yyyyMMdd')"
+    time_function: "MONTHS_BETWEEN"
+    window: 3
+    direction: "<="
+  # === 外部数据-百融多头（范围匹配：近3个月内最近一条） ===
+  "edap_mrs.BRDT_APPLYLOANSTR":
+    match_mode: "range"
+    time_field: "${qry_date}"
+    sample_time_field: "issue_time"
+    time_expr: "{field}"
+    sample_expr: "to_date({field}, 'yyyyMMdd')"
+    time_function: "MONTHS_BETWEEN"
+    window: 3
+    direction: "<="
+  # === 外部数据-百融BR_APPLY（范围匹配：近3个月内最近一条） ===
+  "edap_mrs.BR_APPLYLOANSTR":
+    match_mode: "range"
+    time_field: "${qry_date}"
+    sample_time_field: "issue_time"
+    time_expr: "{field}"
+    sample_expr: "to_date({field}, 'yyyyMMdd')"
+    time_function: "MONTHS_BETWEEN"
+    window: 3
+    direction: "<="
+  # === 外部数据-分期乐（范围匹配：近3个月内最近一条） ===
+  "edap_mrs.FQZ_BRDT_PF, FQZ_BRDT_DZPF":
+    match_mode: "range"
+    time_field: "${qry_date}"
+    sample_time_field: "issue_time"
+    time_expr: "{field}"
+    sample_expr: "to_date({field}, 'yyyyMMdd')"
+    time_function: "MONTHS_BETWEEN"
+    window: 3
+    direction: "<="
+
+# ==================== 额外WHERE条件配置 ====================
+# 用于为特定分类/平台/表添加额外的WHERE限制条件（除分区限制外）
+# 优先级：表 > 平台 > 分类（高优先级覆盖低优先级的同名条件）
+#  conditions中的每个元素是一个完整的SQL条件字符串
+extra_where_conditions:
+  # === 按分类维度（最低优先级）===
+  by_category:
+    # 所有行为变量统一配置产品过滤条件
+    "行为变量":
+      - "prd_sub_cls_cd IN ('${product_code}')"
+
+  # === 按平台维度（中等优先级，覆盖分类配置）===
+  by_platform:
+    # "行为变量-总行":
+    #   - "part_id >= 202412"
+    # "征信变量-消金":
+    #   - "ci_rpt_id IS NOT NULL"
+
+  # === 按表维度（最高优先级，覆盖平台和分类配置）===
+  by_table:
+    # 行为变量的 prd_sub_cls_cd 条件已统一配置在 by_category 中
+    # 如需为特定表覆盖或添加额外条件，可在此配置
+    # 注：征信变量表的分区条件（part_id >= 202512）已通过 partition_control 配置自动生成
+    # 无需在 extra_where_conditions 中重复配置
