@@ -1,0 +1,2 @@
+[console_scripts]
+model-var-diff = model_var_diff.main:main

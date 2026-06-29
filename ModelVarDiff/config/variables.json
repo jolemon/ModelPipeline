@@ -1,0 +1,16 @@
+{
+  "primary_keys": ["sample_id"],
+  "score_column": "model_score",
+  "variables": [
+    {"name": "var1",  "data_source": "source_A", "precision": 6},
+    {"name": "var2",  "data_source": "source_A", "precision": 4},
+    {"name": "var3",  "data_source": "source_A", "precision": 6},
+    {"name": "var4",  "data_source": "source_B", "precision": 3},
+    {"name": "var5",  "data_source": "source_B", "precision": 2},
+    {"name": "var6",  "data_source": "source_B", "precision": 5},
+    {"name": "var7",  "data_source": "source_C", "precision": 4},
+    {"name": "var8",  "data_source": "source_C", "precision": 3},
+    {"name": "var9",  "data_source": "source_D", "precision": 6},
+    {"name": "var10", "data_source": "source_D", "precision": 2}
+  ]
+}

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "model-var-diff"
+version = "0.2.0"
+description = "Model variable online-vs-offline diff tool"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+]
+
+[project.scripts]
+model-var-diff = "model_var_diff.main:main"
+
+[tool.setuptools]
+packages = ["model_var_diff", "model_loaders"]
+
+[tool.setuptools.package-data]
+model_var_diff = ["VALIDATION_RULES.md"]
