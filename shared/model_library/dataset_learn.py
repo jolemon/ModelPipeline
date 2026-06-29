@@ -1,4 +1,4 @@
-from model_library.config import *
+from shared.model_library.config import *
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import numpy as np

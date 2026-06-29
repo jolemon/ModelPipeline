@@ -158,7 +158,7 @@ class ConfigLoader:
         path = explicit_path
         if not path:
             try:
-                from model_library.config import feature_warehouse_path as fwp
+                from shared.model_library.config import feature_warehouse_path as fwp
                 path = fwp
             except ImportError:
                 pass
