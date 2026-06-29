@@ -7,7 +7,7 @@
 from pathlib import Path
 from typing import List, Optional
 
-from src.core.lgb_feature_extractor import LgbFeatureExtractor
+from shared.model_loaders import LgbFeatureExtractor
 
 
 class FeatureExtractionStage:

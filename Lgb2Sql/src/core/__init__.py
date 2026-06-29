@@ -9,7 +9,7 @@
 """
 
 from src.core.config_loader import SQLConfig
-from src.core.lgb_feature_extractor import LgbFeatureExtractor
+from shared.model_loaders import LgbFeatureExtractor
 from src.metadata.manager import MetadataManager
 from src.metadata.models import VariableMetadata, TableMetadata
 from src.core.lgb2sql import Lgb2Sql

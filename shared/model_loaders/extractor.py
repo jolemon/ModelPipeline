@@ -343,7 +343,13 @@ class LgbFeatureExtractor:
         """
         return len(self.get_all_features())
 
+    def get_features(self) -> List[str]:
+        """获取所有入模变量名（ModelVarDiff 兼容别名）
 
+        Returns:
+            变量名列表（原始顺序）
+        """
+        return self.get_all_features()
 
     def get_feature_importance(self, importance_type: str = 'gain') -> Dict[str, float]:
         """
@@ -543,3 +549,18 @@ def extract_features_from_object(model: Any) -> List[str]:
     extractor = LgbFeatureExtractor()
     extractor.load_from_object(model)
     return extractor.get_all_features()
+
+
+def load_model(model_path: Union[str, Path]) -> 'LgbFeatureExtractor':
+    """
+    根据文件后缀自动选择加载器并加载（ModelVarDiff 兼容接口）
+
+    Args:
+        model_path: 模型文件路径(.pkl/.pmml/.model)
+
+    Returns:
+        加载完成的 LgbFeatureExtractor，可直接调用 get_features() / get_all_features()
+    """
+    extractor = LgbFeatureExtractor(model_path)
+    extractor.load_from_file()
+    return extractor

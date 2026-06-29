@@ -33,6 +33,8 @@ from pathlib import Path
 
 # 将src加入路径
 sys.path.insert(0, str(Path(__file__).parent))
+# 将根目录加入路径（访问shared/）
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # 从 pipeline_pkg 统一导入所有公开接口
 from src.pipeline_pkg.pipeline_core import LgbToSqlPipeline, PipelineError, run_pipeline

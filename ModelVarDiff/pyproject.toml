@@ -16,7 +16,7 @@ dependencies = [
 model-var-diff = "model_var_diff.main:main"
 
 [tool.setuptools]
-packages = ["model_var_diff", "model_loaders"]
+packages = ["model_var_diff"]
 
 [tool.setuptools.package-data]
 model_var_diff = ["VALIDATION_RULES.md"]

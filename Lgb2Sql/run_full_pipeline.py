@@ -10,6 +10,8 @@ from pathlib import Path
 
 # 将src加入路径
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
+# 将根目录加入路径（访问shared/）
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pipeline import LgbToSqlPipeline
 

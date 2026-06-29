@@ -113,7 +113,7 @@ class ConfigLoader:
                    primary_keys: list[str],
                    score_column: str,
                    feature_warehouse_path: Optional[str] = None) -> Config:
-        from model_loaders import load_model as load_ml_model
+        from shared.model_loaders import load_model as load_ml_model
 
         loader = load_ml_model(model_path)
         var_names = [n.lower() for n in loader.get_features()]
