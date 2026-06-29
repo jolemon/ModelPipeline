@@ -1,0 +1,59 @@
+<h2>模型报告生成器 — 项目框架概览</h2>
+<p class="subtitle">基于 readme.md 规范，将评分卡模型 + 打分结果 → Excel 模型报告</p>
+
+<div class="section">
+  <h3>📥 输入</h3>
+  <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <div class="mockup" style="flex:1; min-width:200px;">
+      <div class="mockup-header">1. 模型文件 (.pkl)</div>
+      <div class="mockup-body" style="font-size:14px;">
+        训练好的评分卡对象<br/>
+        <span class="label">包含: Binner + Scorecard 实例</span>
+      </div>
+    </div>
+    <div class="mockup" style="flex:1; min-width:200px;">
+      <div class="mockup-header">2. 打分结果 (CSV/DataFrame)</div>
+      <div class="mockup-body" style="font-size:14px;">
+        part_id, cert_no, loan_date,<br/>
+        mob6_30, data_flag, pred_score,<br/>
+        scorecard_score, feat1, feat2...
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>⚙️ 处理引擎 (ReportGenerator)</h3>
+  <div style="display:flex; gap:16px; flex-wrap:wrap;">
+    <div class="placeholder" style="flex:1; min-width:150px;">分区分布统计</div>
+    <div class="placeholder" style="flex:1; min-width:150px;">变量 IV/KS/PSI 分析</div>
+    <div class="placeholder" style="flex:1; min-width:150px;">单变量 WOE 分箱</div>
+    <div class="placeholder" style="flex:1; min-width:150px;">评分卡详情</div>
+    <div class="placeholder" style="flex:1; min-width:150px;">模型效果评估</div>
+    <div class="placeholder" style="flex:1; min-width:150px;">分箱表现分析</div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>📤 输出</h3>
+  <div class="mockup">
+    <div class="mockup-header">Excel 报告 (多个 sheet)</div>
+    <div class="mockup-body">
+      <table style="width:100%; border-collapse:collapse;">
+        <tr><td style="padding:4px 8px;">Sheet 1</td><td style="padding:4px 8px;"><strong>模型设计</strong></td><td style="padding:4px 8px; color:#666;">样本分区分布 + 建模分</td></tr>
+        <tr><td style="padding:4px 8px;">Sheet 2</td><td style="padding:4px 8px;"><strong>变量分析</strong></td><td style="padding:4px 8px; color:#666;">IV/KS/PSI 表格 + Top10 单变量 WOE</td></tr>
+        <tr><td style="padding:4px 8px;">Sheet 3</td><td style="padding:4px 8px;"><strong>模型表现</strong></td><td style="padding:4px 8px; color:#666;">评分卡详情 + 建模效果 + 回溯 + 分箱表现</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>🔗 依赖关系</h3>
+  <div style="text-align:center; padding:16px; background:var(--bg-secondary, #f5f5f5); border-radius:8px;">
+    <code>scorecard_jsb.py</code> (Binner/Scorecard)
+    <span style="margin:0 8px;">→</span>
+    <strong>仅做参考</strong>，了解评分卡内部结构（分箱、WOE、系数）<br/>
+    <span style="color:#666;">报告生成器是新的独立模块，消费已训练好的评分卡对象</span>
+  </div>
+</div>

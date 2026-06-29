@@ -1,0 +1,93 @@
+<h2>设计 — 复用策略、CLI & 测试</h2>
+
+<div class="section">
+  <h3>与现有代码的关系</h3>
+  <table style="width:100%; border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600; width:200px;">dataset_learn.py</td>
+      <td style="padding:8px 12px;">
+        <strong>直接参考/复用其计算函数</strong><br/>
+        calc_missing (缺失率 → toad.detect)<br/>
+        calc_psi (分布 PSI → toad.metrics.PSI)<br/>
+        calc_iv (IV → toad.quality)<br/>
+        calculate_ks (KS 手工实现)<br/>
+        monotonic_binning (完整 WOE/IV/KS/Lift 分箱计算)<br/>
+        get_feature_attr (合并 missing+psi+iv)
+      </td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">scorecard_jsb.py</td>
+      <td style="padding:8px 12px;">
+        <strong>不直接依赖</strong>，通过 ScorecardProtocol 适配<br/>
+        参考: Binner.woetables / Scorecard.show_model_result / Scorecard.generate_scorecard 的数据结构
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px; font-weight:600;">model_library.config</td>
+      <td style="padding:8px 12px;">
+        <strong>引用但尚未创建</strong>，将在 model_report 中以 ReportConfig 独立实现
+      </td>
+    </tr>
+  </table>
+</div>
+
+<div class="section">
+  <h3>依赖清单</h3>
+  <div style="background:var(--bg-secondary, #1e1e1e); color:#d4d4d4; padding:16px; border-radius:8px; font-family:monospace; font-size:13px;">
+    pandas, numpy, scipy          <span style="color:#6a9955;"># 已有</span><br/>
+    statsmodels                   <span style="color:#6a9955;"># 已有 (scorecard_jsb)</span><br/>
+    scikit-learn                  <span style="color:#6a9955;"># 新增: roc_auc_score</span><br/>
+    toad                          <span style="color:#6a9955;"># 已有 (dataset_learn 已引用: PSI, IV, missing)</span><br/>
+    openpyxl                      <span style="color:#6a9955;"># 新增: Excel 写入 + 条件格式</span><br/>
+    click                         <span style="color:#6a9955;"># 新增: CLI</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>CLI 设计</h3>
+  <div style="background:var(--bg-secondary, #1e1e1e); color:#d4d4d4; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:1.6;">
+<span style="color:#dcdcaa;">python -m model_report</span> <span style="color:#ce9178;">\</span><br/>
+&nbsp;&nbsp;<span style="color:#ce9178;">--model</span> model.pkl         <span style="color:#6a9955;"># 评分卡文件路径 (必需)</span><br/>
+&nbsp;&nbsp;<span style="color:#ce9178;">--data</span> score_result.csv   <span style="color:#6a9955;"># 打分结果 (必需)</span><br/>
+&nbsp;&nbsp;<span style="color:#ce9178;">--output</span> report.xlsx      <span style="color:#6a9955;"># 输出路径 (默认: ./model_report.xlsx)</span><br/>
+&nbsp;&nbsp;<span style="color:#ce9178;">--metadata</span> vars.yaml     <span style="color:#6a9955;"># 变量清单 (可选)</span><br/>
+&nbsp;&nbsp;<span style="color:#ce9178;">--config</span> custom.toml     <span style="color:#6a9955;"># 自定义配置 (可选，覆盖默认列名)</span>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Python API</h3>
+  <div style="background:var(--bg-secondary, #1e1e1e); color:#d4d4d4; padding:16px; border-radius:8px; font-family:monospace; font-size:13px; line-height:1.6;">
+<span style="color:#569cd6;">from</span> model_report <span style="color:#569cd6;">import</span> ReportGenerator, ReportConfig, PickledScorecardAdapter<br/>
+<br/>
+config = ReportConfig()  <span style="color:#6a9955;"># 全部默认</span><br/>
+scorecard = PickledScorecardAdapter(<span style="color:#ce9178;">"model.pkl"</span>)<br/>
+generator = ReportGenerator(scorecard, config)<br/>
+generator.generate(df).to_excel(<span style="color:#ce9178;">"output.xlsx"</span>)
+  </div>
+</div>
+
+<div class="section">
+  <h3>测试策略</h3>
+  <table style="width:100%; border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">单元测试</td>
+      <td style="padding:8px 12px;">
+        每个 sheet builder 独立可测：输入固定 DataFrame + Mock ScorecardProtocol，验证输出 DataFrame 的列名、行数、数值范围<br/>
+        指标计算函数独立测试：KS/AUC/PSI/Lift 已知预期值验证<br/>
+        配置合并逻辑测试：默认值 vs 用户覆盖
+      </td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border, #ddd);">
+      <td style="padding:8px 12px; font-weight:600;">集成测试</td>
+      <td style="padding:8px 12px;">
+        用 test.csv 作为输入，构造 Mock ScorecardProtocol，完整走通 generate() → Excel 输出<br/>
+        验证生成的 Excel 文件存在、sheet 名称正确、行数合理
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px; font-weight:600;">框架</td>
+      <td style="padding:8px 12px;">pytest + pytest-cov</td>
+    </tr>
+  </table>
+</div>
