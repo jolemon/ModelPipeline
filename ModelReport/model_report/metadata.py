@@ -4,6 +4,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from shared.classifier import classify_category, classify_platform
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,8 +74,8 @@ def _parse_feature_warehouse(df: pd.DataFrame) -> dict:
 
     # Apply classification
     if "来源表" in df.columns:
-        df["类型"] = df["来源表"].apply(_classify_category)
-        df["平台"] = df["来源表"].apply(_classify_platform)
+        df["类型"] = df["来源表"].apply(classify_category)
+        df["平台"] = df["来源表"].apply(classify_platform)
     else:
         df["类型"] = ""
         df["平台"] = ""
@@ -96,70 +98,3 @@ def _parse_feature_warehouse(df: pd.DataFrame) -> dict:
         }
 
     return result
-
-
-# ── Classification functions (from model_library/dataset_learn.py) ──
-
-def _classify_category(table_name) -> str:
-    """Classify feature category by source table name.
-
-    Returns: 行为变量 / 外部数据 / 征信变量 / 模型分 / ""
-    """
-    if not table_name or not isinstance(table_name, str):
-        return ""
-    t = table_name.lower()
-    if (t.startswith("wdyy.t_ccr") or t.startswith("wdyy.c01_ccr")
-            or t.startswith("t_cc_cust") or t.startswith("wdyy.t_cc_cust")
-            or t.startswith("ads.ads_risk_")):
-        return "行为变量"
-    if (t.startswith("edap.") or table_name == "jsbrpt.v_ods_02_all_zzxqsf_md5"
-            or table_name in ("度小满", "京东", "腾讯", "天创", "友盟", "同盾")):
-        return "外部数据"
-    if (t.startswith("t_pbci") or t.startswith("wdyy.t_zxysblhs")
-            or t.startswith("wdyy.v_md5_t_zxysblhs")
-            or t.startswith("jsbrpt_mrs.zxbl_his")):
-        return "征信变量"
-    if t.startswith("sykj1.model"):
-        return "模型分"
-    return ""
-
-
-def _classify_platform(table_name) -> str:
-    """Classify feature platform by source table name.
-
-    Returns: platform name (百融/字节/京东白条/etc.) or ""
-    """
-    if not table_name or not isinstance(table_name, str):
-        return ""
-    t = table_name.lower()
-    if t.startswith("edap.v_br") or t.startswith("edap.v_fqz_br"):
-        return "百融"
-    if (t.startswith("wdyy.t_ccrdyyf") or t.startswith("wdyy.c01_ccrdyyf")
-            or t.startswith("ned772")):
-        return "字节"
-    if t.startswith("wdyy.t_ccrbt"):
-        return "京东白条"
-    if table_name in ("度小满", "京东", "腾讯", "天创", "友盟", "同盾"):
-        return table_name
-    if table_name == "jsbrpt.v_ods_02_all_zzxqsf_md5":
-        return "中征信"
-    if t.startswith("ed0509"):
-        return "天辰"
-    if t.startswith("ned0535"):
-        return "友盟"
-    if t.startswith("ed0223"):
-        return "度小满"
-    if t.startswith("edap.") or t.startswith("ed"):
-        return "外部数据"
-    if t.startswith("ads.ads_risk_"):
-        return "贷中行为变量-新底座"
-    if table_name == "wdyy.T_CC_CUST_BEHAV_VARBL_INDEX":
-        return "行为变量-消金"
-    if t.startswith("t_cc_cust") or t.startswith("wdyy.t_cc_cust"):
-        return "行为变量-总行"
-    if (t.startswith("wdyy.t_zxysblhs") or t.startswith("wdyy.v_md5_t_zxysblhs")
-            or t.startswith("jsbrpt_mrs.zxbl_his")):
-        return "征信变量-消金"
-    if t.startswith("t_pbci"):
-        return "征信变量-总行"
-    return ""

@@ -2,18 +2,9 @@ import pandas as pd
 import numpy as np
 
 from .config_loader import Config, VariableDef
+from shared.utils import is_missing
 
-
-def _is_null(series: pd.Series) -> pd.Series:
-    """Check for null values: NaN, empty string, or values < -9999."""
-    null_mask = series.isna()
-    if series.dtype == object:
-        str_col = series.astype(str).str.strip()
-        null_mask = null_mask | (str_col == "") | (str_col == "nan") | (str_col == "NaN")
-    # Convert to numeric where possible for the sentinel check
-    numeric_series = pd.to_numeric(series, errors="coerce")
-    null_mask = null_mask | (numeric_series < -9999)
-    return null_mask
+_is_null = is_missing  # 向后兼容别名
 
 
 class Comparator:

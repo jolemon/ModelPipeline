@@ -10,7 +10,7 @@ from pathlib import Path
 from collections import defaultdict, Counter
 from typing import Dict, List, Any
 
-from src.metadata.classifier import classify_category, classify_platform, classify_fallback
+from shared.classifier import classify_category, classify_platform, classify_fallback
 from src.metadata.key_inference import infer_join_keys, is_likely_key_field
 
 

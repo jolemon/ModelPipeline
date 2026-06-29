@@ -3,10 +3,9 @@ import pandas as pd
 from sklearn.metrics import roc_curve, auc as sklearn_auc
 from scipy import stats
 
+from shared.utils import calc_missing_rate, to_month, MISSING_THRESHOLD
 
-def to_month(series: pd.Series) -> pd.Series:
-    """Convert date series to yyyyMM string: 2025-1-6 → 202501."""
-    return pd.to_datetime(series, errors="coerce").dt.strftime("%Y%m")
+SPECIAL_MISSING_THRESHOLD = MISSING_THRESHOLD  # 向后兼容别名
 
 
 def calc_auc(y_true, y_score, sample_weight=None) -> float:
@@ -258,30 +257,6 @@ def calc_monthly_metrics(df, target_col: str = "mob6_30",
 
     print(f"\r    回溯效果: {n_months}/{n_months} ✓" + " " * 20)
     return pd.DataFrame(rows).sort_values(by="观察点月", ascending=True)
-
-
-SPECIAL_MISSING_THRESHOLD = -99999
-
-
-def calc_missing_rate(series, threshold=None) -> float:
-    """Calculate missing rate treating NaN and values <= threshold as missing.
-
-    Per project convention, values <= -99999 are treated as missing.
-    """
-    import pandas as pd
-
-    if threshold is None:
-        threshold = SPECIAL_MISSING_THRESHOLD
-
-    total = len(series)
-    if total == 0:
-        return 0.0
-
-    numeric = pd.to_numeric(series, errors="coerce")
-    nan_mask = numeric.isna()
-    special_mask = numeric <= threshold
-    missing_count = (nan_mask | special_mask).sum()
-    return float(missing_count / total)
 
 
 def calc_var_psi(train_series, oot_series) -> float:
