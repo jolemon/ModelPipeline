@@ -69,7 +69,7 @@ from src.metadata.manager import MetadataManager
 from src.metadata.variable_classifier import VariableClassifier
 from src.metadata.override_applier import OverrideApplier
 from src.metadata.metadata_statistics import MetadataStatistics
-from shared.classifier import classify_category, classify_platform, classify_fallback
+from shared.metadata.classifier import classify_category, classify_platform, classify_fallback
 from src.metadata.key_inference import (
     infer_join_keys,
     is_likely_key_field,

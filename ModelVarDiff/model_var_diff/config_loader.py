@@ -139,7 +139,7 @@ class ConfigLoader:
             table_meta=ConfigLoader._build_table_meta(warehouse),
         )
 
-    # ── shared ──────────────────────────────────────────────────
+    # ── shared helpers ──────────────────────────────────────────
 
     @staticmethod
     def _read_var_names(path: str) -> list[str]:
@@ -154,46 +154,15 @@ class ConfigLoader:
 
     @staticmethod
     def _load_feature_warehouse(explicit_path: Optional[str] = None) -> Optional[pd.DataFrame]:
-        """Try to load feature warehouse from explicit path or model_library.config."""
-        path = explicit_path
-        if not path:
-            try:
-                from shared.model_library.config import feature_warehouse_path as fwp
-                path = fwp
-            except ImportError:
-                pass
-        if not path or not os.path.exists(path):
-            return None
-
-        # Load file
-        if path.endswith(".xlsx") or path.endswith(".xls"):
-            df = pd.read_excel(path)
-        else:
-            # Detect delimiter: if file starts with BOM or Chinese, try tab first
-            df = pd.read_csv(path, sep="\t" if path.endswith(".csv") else None)
-
-        if "字段名" not in df.columns:
-            return None
-
-        df["字段名"] = df["字段名"].astype(str).str.lower()
-
-        # Resolve data_source column: prefer 来源表, else compose from 库名.表名
-        if "来源表" in df.columns:
-            pass  # already present
-        elif "库名" in df.columns and "表名" in df.columns:
-            df["来源表"] = df["库名"].astype(str) + "." + df["表名"].astype(str)
-        else:
-            return None
-
-        return df
+        """委托给 shared.metadata.loader.load_feature_warehouse"""
+        from shared.metadata.loader import load_feature_warehouse
+        return load_feature_warehouse(explicit_path, compose_source=True)
 
     @staticmethod
     def _lookup_source(warehouse: Optional[pd.DataFrame], var_name: str) -> str:
-        if warehouse is not None:
-            match = warehouse[warehouse["字段名"] == var_name.lower()]
-            if len(match) > 0:
-                return str(match.iloc[0]["来源表"])
-        return "unknown"
+        """委托给 shared.metadata.loader.lookup_source"""
+        from shared.metadata.loader import lookup_source
+        return lookup_source(warehouse, var_name)
 
     @staticmethod
     def _build_table_meta(warehouse: Optional[pd.DataFrame]) -> Optional[TableMeta]:
